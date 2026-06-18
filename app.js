@@ -3,12 +3,11 @@ const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const API_URL = '/api'; // Ya no es estrictamente necesario para registros
-
 // Cambiar entre secciones (Registro, Veedor, Caja)
 function showSection(id) {
     document.querySelectorAll('section').forEach(s => s.style.display = 'none');
     document.getElementById(id).style.display = 'block';
+    if (id === 'caja') actualizarListaCobros();
 }
 
 // Mostrar/Ocultar campos de adherente
@@ -36,23 +35,78 @@ async function buscarJugador() {
     }
 }
 
-// Función para cargar la falta (Simulación)
-function cargarFalta() {
+// Función para cargar la falta en Supabase
+async function cargarFalta() {
     const ci = document.getElementById('veedor-ci').value;
     const tipo = document.getElementById('tipo-falta').value;
-    const monto = tipo === 'roja' ? '50.000' : '20.000';
+    const monto = tipo === 'roja' ? 50000 : 20000; // Usar números para el monto
 
-    const lista = document.getElementById('lista-cobros');
-    const fila = `<tr>
-        <td>${ci}</td>
-        <td>Juan Pérez</td>
-        <td>Tarjeta ${tipo.toUpperCase()}</td>
-        <td>${monto} GS.</td>
-        <td><button onclick="this.parentElement.parentElement.remove()" class="btn-guardar">Cobrar</button></td>
-    </tr>`;
-    lista.innerHTML += fila;
-    alert("Falta cargada al sistema de caja");
+    // Obtener el nombre del jugador de la base de datos
+    const { data: atleta, error: atletaError } = await supabaseClient
+        .from('atletas')
+        .select('nombre')
+        .eq('ci', ci)
+        .single();
+
+    if (atletaError || !atleta) {
+        alert("Error: No se pudo encontrar el nombre del jugador con CI: " + ci);
+        return;
+    }
+
+    const nombreJugador = atleta.nombre;
+
+    // Guardar la falta en la tabla 'faltas' de Supabase
+    const { data, error } = await supabaseClient
+        .from('faltas') // Asumiendo que tienes una tabla llamada 'faltas'
+        .insert([
+            { ci_jugador: ci, nombre_jugador: nombreJugador, tipo_falta: tipo, monto: monto, pagado: false }
+        ]);
+
+    if (error) {
+        alert("Error al cargar la falta en Supabase: " + error.message);
+    } else {
+        alert("✅ Falta cargada en el sistema de caja (Supabase) correctamente");
+        // Opcional: Recargar la lista de cobros en la sección de Caja
+        // para que se muestre la nueva falta.
+        // Por ahora, solo ocultamos el resultado de búsqueda.
+    }
+    
     document.getElementById('resultado-busqueda').style.display = 'none';
+}
+
+// Función para cargar las faltas pendientes en la sección de Caja
+async function actualizarListaCobros() {
+    const lista = document.getElementById('lista-cobros');
+    lista.innerHTML = "<tr><td colspan='5'>Cargando deudas...</td></tr>";
+
+    const { data: faltas, error } = await supabaseClient
+        .from('faltas')
+        .select('*')
+        .eq('pagado', false);
+
+    if (error) return alert("Error al cargar faltas: " + error.message);
+
+    lista.innerHTML = "";
+    faltas.forEach(f => {
+        lista.innerHTML += `<tr>
+            <td>${f.ci_jugador}</td>
+            <td>${f.nombre_jugador}</td>
+            <td>Tarjeta ${f.tipo_falta.toUpperCase()}</td>
+            <td>${f.monto.toLocaleString()} GS.</td>
+            <td><button onclick="cobrarFalta('${f.id}')" class="btn-guardar">Cobrar</button></td>
+        </tr>`;
+    });
+}
+
+// Función para marcar una falta como pagada
+async function cobrarFalta(id) {
+    const { error } = await supabaseClient
+        .from('faltas')
+        .update({ pagado: true })
+        .eq('id', id);
+
+    if (error) alert("Error al procesar cobro: " + error.message);
+    else actualizarListaCobros();
 }
 
 // --- SISTEMA DE LOGIN Y ROLES ---
