@@ -1,0 +1,132 @@
+:root {
+    --primary-color: #004a99; /* Azul AFEMEC */
+    --accent-color: #f39c12;  /* Naranja/Oro para botones */
+    --bg-color: #f4f7f6;
+    --text-color: #333;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    margin: 0;
+}
+
+header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+}
+
+#main-logo {
+    max-height: 80px;
+}
+
+nav {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    background: #003366;
+    padding: 10px;
+}
+
+nav button {
+    background: transparent;
+    border: 1px solid white;
+    color: white;
+    padding: 8px 15px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+nav button:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+section {
+    max-width: 800px;
+    margin: 20px auto;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+input, select {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.btn-guardar, .btn-falta {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.tabla-deportiva {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.9rem;
+}
+
+.tabla-deportiva th {
+    background-color: #eee;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.tabla-deportiva th, .tabla-deportiva td {
+    border-bottom: 1px solid #ddd;
+    padding: 12px;
+    text-align: left;
+}
+
+.partido-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border: 1px solid #eee;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    background: #fafafa;
+}
+
+.partido-card .hora {
+    font-weight: bold;
+    color: var(--primary-color);
+    width: 60px;
+}
+
+.partido-card .enfrentamiento {
+    flex-grow: 1;
+    text-align: center;
+    font-weight: 500;
+}
+
+.fecha-grupo h3 {
+    border-bottom: 2px solid var(--accent-color);
+    padding-bottom: 5px;
+    margin-top: 20px;
+    color: var(--primary-color);
+}
+
+#form-login {
+    max-width: 350px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}

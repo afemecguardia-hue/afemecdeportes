@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFEMEC - Sistema de Torneo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <!-- Aquí colocarás el logo que me vas a pasar -->
+            <img src="logo-afemec.png" alt="Logo AFEMEC" id="main-logo">
+            <h1>AFEMEC - Gestión de Torneos</h1>
+        </div>
+        <nav>
+            <button onclick="showSection('registro')">Inscripción</button>
+            <button onclick="showSection('estadisticas')">Estadísticas</button>
+            <button onclick="showSection('programacion')">Programación</button>
+            <button id="nav-veedor" style="display:none;" onclick="showSection('veedor')">Veedor</button>
+            <button id="nav-caja" style="display:none;" onclick="showSection('caja')">Caja</button>
+            <button id="nav-login" onclick="showSection('login')">Ingresar</button>
+            <button id="nav-logout" style="display:none;" onclick="logout()">Salir</button>
+        </nav>
+    </header>
+
+    <main id="content">
+        <!-- SECCIÓN: LOGIN -->
+        <section id="login" style="display:none;">
+            <h2>Acceso Personal AFEMEC</h2>
+            <form id="form-login">
+                <label>Usuario:</label>
+                <input type="text" id="login-user" required placeholder="veedor o caja">
+                <label>Contraseña:</label>
+                <input type="password" id="login-pass" required placeholder="afemec123">
+                <button type="submit" class="btn-guardar">Entrar al Sistema</button>
+            </form>
+        </section>
+
+        <!-- SECCIÓN: REGISTRO DE ATLETAS -->
+        <section id="registro" class="active">
+            <h2>Registro de Atleta</h2>
+            <form id="form-registro">
+                <label>Cédula de Identidad (CI): *</label>
+                <input type="text" id="reg-ci" required placeholder="Ej: 1.234.567">
+
+                <label>Nombre Completo: *</label>
+                <input type="text" id="reg-nombre" required>
+
+                <label>Edad: *</label>
+                <input type="number" id="reg-edad" required min="5">
+
+                <label>Tipo de Miembro:</label>
+                <select id="reg-tipo" onchange="toggleAdherente()">
+                    <option value="socio">Socio</option>
+                    <option value="aderente">Adherente</option>
+                </select>
+
+                <div id="campo-adherente" style="display:none;">
+                    <label>Parentesco (para Adherentes):</label>
+                    <select id="reg-parentesco">
+                        <option value="hijo">Hijo/a</option>
+                        <option value="conyugue">Cónyuge</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-guardar">Registrarse</button>
+            </form>
+        </section>
+
+        <!-- SECCIÓN: VEEDOR (CARGA DE FALTAS) -->
+        <section id="veedor" style="display:none;">
+            <h2>Carga de Faltas (Veedor)</h2>
+            <div class="search-box">
+                <input type="text" id="veedor-ci" placeholder="Ingresar CI del jugador">
+                <button onclick="buscarJugador()">Buscar Jugador</button>
+            </div>
+            <div id="resultado-busqueda" class="card" style="display:none;">
+                <p><strong>Jugador:</strong> <span id="nombre-encontrado"></span></p>
+                <label>Tipo de Tarjeta:</label>
+                <select id="tipo-falta">
+                    <option value="amarilla">Amarilla</option>
+                    <option value="azul">Azul (2 min)</option>
+                    <option value="roja">Roja</option>
+                </select>
+                <button onclick="cargarFalta()" class="btn-falta">Cargar Deuda al CI</button>
+            </div>
+        </section>
+
+        <!-- SECCIÓN: CAJA (COBROS) -->
+        <section id="caja" style="display:none;">
+            <h2>Arqueo de Caja / Cobro de Multas</h2>
+            <div class="caja-stats">
+                <p>Total Recaudado Hoy: <strong id="total-hoy">0 GS.</strong></p>
+            </div>
+            <table class="tabla-deportiva">
+                <thead>
+                    <tr>
+                        <th>CI</th>
+                        <th>Jugador</th>
+                        <th>Falta</th>
+                        <th>Monto</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-cobros">
+                    <!-- Los datos se cargan dinámicamente -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- SECCIÓN: ESTADÍSTICAS -->
+        <section id="estadisticas" style="display:none;">
+            <h2>Tabla de Posiciones - Temporada Actual</h2>
+            <div class="filtros">
+                <select id="filtro-temporada">
+                    <option value="apertura2024">Apertura 2024</option>
+                    <option value="clausura2024">Clausura 2024</option>
+                </select>
+            </div>
+            <div id="admin-db-tools" style="display:none; margin-bottom: 20px;">
+                <button onclick="descargarExcelAtletas()" class="btn-guardar" style="background-color: #27ae60;">📥 Descargar Planilla de Atletas (Excel)</button>
+            </div>
+            <table class="tabla-deportiva">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Equipo</th>
+                        <th>PJ</th>
+                        <th>G</th>
+                        <th>E</th>
+                        <th>P</th>
+                        <th>Pts</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-posiciones-body">
+                    <!-- Datos de ejemplo -->
+                    <tr><td>1</td><td>Los Halcones</td><td>5</td><td>4</td><td>1</td><td>0</td><td>13</td></tr>
+                    <tr><td>2</td><td>Dep. AFEMEC</td><td>5</td><td>3</td><td>0</td><td>2</td><td>9</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- SECCIÓN: PROGRAMACIÓN -->
+        <section id="programacion" style="display:none;">
+            <h2>Programación de Juegos</h2>
+            <div id="admin-fixture" style="display:none; margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 15px;">
+                <button onclick="generarFixtureAutomatico()" class="btn-guardar" style="background-color: var(--accent-color);">Generar Fixture Automático</button>
+            </div>
+            <div id="calendario-juegos">
+                <div class="fecha-grupo">
+                    <h3>Sábado 25 de Mayo</h3>
+                    <div class="partido-card">
+                        <span class="hora">15:00</span>
+                        <span class="enfrentamiento">Halcones vs Dep. AFEMEC</span>
+                        <span class="cancha">Cancha 1</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
