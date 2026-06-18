@@ -72,6 +72,7 @@ async function cargarFalta() {
     }
     
     document.getElementById('resultado-busqueda').style.display = 'none';
+    document.getElementById('veedor-ci').value = ''; // Limpia el campo de CI
 }
 
 // Función para cargar las faltas pendientes en la sección de Caja
