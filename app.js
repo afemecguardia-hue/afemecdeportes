@@ -3,11 +3,42 @@ const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Cambiar entre secciones (Registro, Veedor, Caja)
+// Cambiar entre secciones (Registro, Veedor, Caja, Estadísticas, Programación)
 function showSection(id) {
-    document.querySelectorAll('section').forEach(s => s.style.display = 'none');
-    document.getElementById(id).style.display = 'block';
-    if (id === 'caja') actualizarListaCobros();
+    // Ocultar todas las secciones
+    document.querySelectorAll('main > section').forEach(s => {
+        s.style.display = 'none';
+        s.classList.remove('active');
+    });
+    
+    // Mostrar la sección seleccionada con clase active
+    const targetSection = document.getElementById(id);
+    if (targetSection) {
+        targetSection.style.display = 'block';
+        setTimeout(() => {
+            targetSection.classList.add('active');
+        }, 10);
+    }
+    
+    // Actualizar botones de navegación
+    document.querySelectorAll('.main-nav .nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Asignar active al botón correspondiente
+    const activeBtn = document.getElementById(`btn-${id}`) || document.getElementById(`nav-${id}`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+    }
+
+    if (id === 'caja') {
+        actualizarListaCobros();
+    }
+    
+    // Renderizar iconos de Lucide
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
 }
 
 // Mostrar/Ocultar campos de adherente
@@ -88,15 +119,35 @@ async function actualizarListaCobros() {
     if (error) return alert("Error al cargar faltas: " + error.message);
 
     lista.innerHTML = "";
-    faltas.forEach(f => {
-        lista.innerHTML += `<tr>
-            <td>${f.ci_jugador}</td>
-            <td>${f.nombre_jugador}</td>
-            <td>Tarjeta ${f.tipo_falta.toUpperCase()}</td>
-            <td>${f.monto.toLocaleString()} GS.</td>
-            <td><button onclick="cobrarFalta('${f.id}')" class="btn-guardar">Cobrar</button></td>
-        </tr>`;
-    });
+    if (!faltas || faltas.length === 0) {
+        lista.innerHTML = "<tr><td colspan='5' style='text-align: center; color: var(--text-muted);'>No hay deudas pendientes</td></tr>";
+    } else {
+        faltas.forEach(f => {
+            lista.innerHTML += `<tr>
+                <td><strong>${f.ci_jugador}</strong></td>
+                <td>${f.nombre_jugador}</td>
+                <td><span class="badge badge-${f.tipo_falta}">Tarjeta ${f.tipo_falta.toUpperCase()}</span></td>
+                <td class="monto-col">${Number(f.monto).toLocaleString()} GS.</td>
+                <td><button onclick="cobrarFalta('${f.id}')" class="btn-action">Cobrar</button></td>
+            </tr>`;
+        });
+    }
+
+    // Calcular el total recaudado hoy (faltas marcadas como pagadas)
+    try {
+        const { data: pagadas, error: errorPagadas } = await supabaseClient
+            .from('faltas')
+            .select('monto')
+            .eq('pagado', true);
+
+        let totalHoy = 0;
+        if (!errorPagadas && pagadas) {
+            totalHoy = pagadas.reduce((sum, f) => sum + (Number(f.monto) || 0), 0);
+        }
+        document.getElementById('total-hoy').innerText = `${totalHoy.toLocaleString()} GS.`;
+    } catch (e) {
+        console.error("Error al calcular total hoy:", e);
+    }
 }
 
 // Función para marcar una falta como pagada
@@ -106,38 +157,100 @@ async function cobrarFalta(id) {
         .update({ pagado: true })
         .eq('id', id);
 
-    if (error) alert("Error al procesar cobro: " + error.message);
-    else actualizarListaCobros();
+    if (error) {
+        alert("Error al procesar cobro: " + error.message);
+    } else {
+        actualizarListaCobros();
+    }
 }
 
 // --- SISTEMA DE LOGIN Y ROLES ---
-document.getElementById('form-login').addEventListener('submit', function(e) {
+document.getElementById('form-login').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const user = document.getElementById('login-user').value.toLowerCase();
+    const user = document.getElementById('login-user').value.toLowerCase().trim();
     const pass = document.getElementById('login-pass').value;
 
-    // Credenciales de prueba (Esto se validaría con la base de datos)
-    if (pass === 'afemec123') {
+    let userData = null;
+    let fallback = false;
+
+    try {
+        // Consultar la tabla 'users' en Supabase
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('username', user)
+            .single();
+
+        if (error || !data) {
+            fallback = true;
+        } else {
+            userData = data;
+        }
+    } catch (err) {
+        fallback = true;
+    }
+
+    // Fallback con credenciales locales si no existe la tabla de usuarios en Supabase o falla
+    if (fallback) {
+        const localUsers = {
+            'veedor': { role: 'veedor', username: 'veedor', pass: 'afemec123' },
+            'caja': { role: 'caja', username: 'caja', pass: 'afemec123' },
+            'admin': { role: 'admin', username: 'admin', pass: 'afemec123' }
+        };
+
+        const localUser = localUsers[user];
+        if (localUser && localUser.pass === pass) {
+            userData = {
+                role: localUser.role,
+                username: localUser.username
+            };
+        }
+    } else {
+        // Si encontramos el usuario en Supabase, validamos su password
+        const passwordMatch = userData.password_hash === pass || userData.password === pass;
+        if (!passwordMatch) {
+            userData = null;
+        }
+    }
+
+    if (userData) {
+        // Guardar el rol en localStorage para mantener la sesión
+        localStorage.setItem('userRole', userData.role);
+        localStorage.setItem('username', userData.username);
+
         document.getElementById('nav-login').style.display = 'none';
         document.getElementById('nav-logout').style.display = 'block';
-        document.getElementById('admin-fixture').style.display = 'block';
-        document.getElementById('admin-db-tools').style.display = 'block';
-        
-        if (user === 'veedor') {
+
+        // Ocultar primero todos los menús especiales
+        document.getElementById('nav-veedor').style.display = 'none';
+        document.getElementById('nav-caja').style.display = 'none';
+        document.getElementById('admin-fixture').style.display = 'none';
+        document.getElementById('admin-db-tools').style.display = 'none';
+
+        if (userData.role === 'veedor') {
             document.getElementById('nav-veedor').style.display = 'block';
             showSection('veedor');
-        } else if (user === 'caja') {
+        } else if (userData.role === 'caja') {
             document.getElementById('nav-caja').style.display = 'block';
             showSection('caja');
+        } else if (userData.role === 'admin') {
+            document.getElementById('nav-veedor').style.display = 'block';
+            document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('admin-fixture').style.display = 'block';
+            document.getElementById('admin-db-tools').style.display = 'block';
+            showSection('estadisticas');
         }
-        alert(`Bienvenido al Panel de ${user.toUpperCase()}`);
+        alert(`Bienvenido al Panel de ${userData.role.toUpperCase()}`);
+        document.getElementById('form-login').reset();
     } else {
-        alert("Contraseña incorrecta. Intente con 'afemec123'");
+        alert("Usuario o contraseña incorrectos.");
     }
 });
 
 function logout() {
-    location.reload(); // Forma rápida de limpiar el estado y cerrar sesión
+    localStorage.removeItem('userRole'); // Limpiar el rol guardado
+    localStorage.removeItem('username'); // Limpiar el nombre de usuario
+    location.reload(); // Recargar la página para restablecer la UI
 }
 
 // --- GENERACIÓN DE PROGRAMACIÓN (FIXTURE) ---
@@ -161,12 +274,13 @@ function generarFixtureAutomatico() {
 document.getElementById('form-registro').addEventListener('submit', async function(e) {
     e.preventDefault();
     
+    const tipo = document.getElementById('reg-tipo').value;
     const nuevoAtleta = {
-        ci: document.getElementById('reg-ci').value,
-        nombre: document.getElementById('reg-nombre').value,
-        edad: document.getElementById('reg-edad').value,
-        tipo: document.getElementById('reg-tipo').value,
-        parentesco: document.getElementById('reg-parentesco').value || "N/A"
+        ci: document.getElementById('reg-ci').value.trim(),
+        nombre: document.getElementById('reg-nombre').value.trim(),
+        edad: parseInt(document.getElementById('reg-edad').value, 10),
+        tipo: tipo,
+        parentesco: tipo === 'aderente' ? document.getElementById('reg-parentesco').value : "N/A"
     };
 
     // Guardar directamente en Supabase
@@ -175,6 +289,7 @@ document.getElementById('form-registro').addEventListener('submit', async functi
         .insert([nuevoAtleta]);
 
     if (error) {
+        console.error("Detalle del error de Supabase:", error);
         alert("Error al registrar: " + error.message);
     } else {
         alert("✅ Atleta registrado en Supabase correctamente");
@@ -208,3 +323,34 @@ async function descargarExcelAtletas() {
         alert("Error al descargar los datos");
     }
 }
+
+// --- Inicialización al cargar la página ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Mostrar la sección de registro por defecto
+    showSection('registro');
+
+    // Verificar si hay una sesión activa (rol guardado)
+    const userRole = localStorage.getItem('userRole');
+    if (userRole) {
+        document.getElementById('nav-login').style.display = 'none';
+        document.getElementById('nav-logout').style.display = 'block';
+
+        if (userRole === 'veedor') {
+            document.getElementById('nav-veedor').style.display = 'block';
+            showSection('veedor');
+        } else if (userRole === 'caja') {
+            document.getElementById('nav-caja').style.display = 'block';
+            showSection('caja');
+        } else if (userRole === 'admin') {
+            document.getElementById('nav-veedor').style.display = 'block';
+            document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('admin-fixture').style.display = 'block';
+            document.getElementById('admin-db-tools').style.display = 'block';
+            showSection('estadisticas');
+        }
+    } else {
+        // Si no hay sesión, asegurar que solo se vea el login o registro
+        document.getElementById('nav-login').style.display = 'block';
+        showSection('registro'); // O 'login' si quieres que el login sea la primera pantalla
+    }
+});
