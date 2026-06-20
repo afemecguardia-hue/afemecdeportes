@@ -89,6 +89,27 @@
     <!-- CONTENEDOR PRINCIPAL -->
     <main class="app-main">
 
+        <!-- BANNER PROMOCIONAL DEL PARTIDO DESTACADO -->
+        <section id="promo-banner" class="promo-banner">
+            <div class="promo-overlay"></div>
+            <div class="promo-content">
+                <div class="promo-copy">
+                    <span class="promo-label">Desafío en Vivo</span>
+                    <h2 id="promo-title">Partido Destacado</h2>
+                    <p id="promo-subtitle">Programa un partido desde el administrador para verlo aquí con estilo reflectivo y energía competitiva.</p>
+                    <div class="promo-meta">
+                        <span id="promo-fecha">Fecha: --</span>
+                        <span id="promo-hora">Hora: --</span>
+                        <span id="promo-lugar">Cancha: --</span>
+                    </div>
+                </div>
+                <div class="promo-visual">
+                    <div class="promo-badge">¡Reto!</div>
+                    <div class="promo-illustration"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- SECCIÓN: LOGIN -->
         <section id="login" style="display:none;" class="section-card">
             <div class="section-header-icon">
@@ -215,6 +236,44 @@
                     <input type="text" id="veedor-ci" placeholder="Ingresar CI del jugador (ej. 1.234.567)">
                 </div>
                 <button onclick="buscarJugador()" class="btn-search">
+                    <span>Buscar</span>
+                </button>
+            </div>
+            <div class="form-group" style="width: 100%; margin-top: 18px;">
+                <label for="veedor-partido">Partido en desarrollo</label>
+                <div class="input-icon-wrapper">
+                    <i data-lucide="flag" class="input-icon"></i>
+                    <select id="veedor-partido">
+                        <option value="">Elige un partido</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" style="width: 100%; margin-top: 18px;">
+                <label for="veedor-goles">Goles anotados</label>
+                <div class="input-icon-wrapper">
+                    <i data-lucide="award" class="input-icon"></i>
+                    <input type="number" id="veedor-goles" min="0" value="0" placeholder="Cantidad de goles" />
+                </div>
+            </div>
+            <div class="form-group" style="width: 100%; margin-top: 18px;">
+                <label for="veedor-tarjeta">Registro de Tarjeta</label>
+                <div class="input-icon-wrapper">
+                    <i data-lucide="credit-card" class="input-icon"></i>
+                    <select id="veedor-tarjeta">
+                        <option value="ninguna">Ninguna</option>
+                        <option value="amarilla">Amarilla</option>
+                        <option value="azul">Azul</option>
+                        <option value="roja">Roja</option>
+                    </select>
+                </div>
+            </div>
+            <button onclick="reportarIncidencia()" class="btn-secondary btn-block" style="margin-top: 8px;">
+                <i data-lucide="check-circle"></i>
+                <span>Registrar incidencia del juego</span>
+            </button>
+        </div>
+
+        <button onclick="buscarJugador()" class="btn-search">
                     <span>Buscar</span>
                 </button>
             </div>
@@ -493,6 +552,13 @@
                         <button type="submit" class="btn-primary" style="padding: 12px 20px; white-space: nowrap;">
                             <i data-lucide="plus"></i> Agregar
                         </button>
+                        <div class="form-group" style="flex-basis: 220px;">
+                            <label for="new-team-logo">Logo del equipo</label>
+                            <div class="input-icon-wrapper">
+                                <i data-lucide="image" class="input-icon"></i>
+                                <input type="file" id="new-team-logo" accept="image/*" style="padding-left: 42px;" />
+                            </div>
+                        </div>
                     </form>
                     
                     <div class="table-container" style="max-height: 250px; overflow-y: auto;">
@@ -512,6 +578,58 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+            <div class="admin-card" style="background: #f8fafc; border: 1px solid var(--border-color); padding: 25px; border-radius: var(--radius-md); margin-top: 30px;">
+                <h3 class="table-title" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;"><i data-lucide="calendar-clock" style="width: 20px;"></i>Programar Partido</h3>
+                <form id="form-programar-partido" class="premium-form" style="max-width: 100%; gap: 18px;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="match-home">Equipo Local</label>
+                            <select id="match-home" required>
+                                <option value="">Seleccione un equipo</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="match-away">Equipo Visitante</label>
+                            <select id="match-away" required>
+                                <option value="">Seleccione un equipo</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="match-date">Fecha</label>
+                            <input type="date" id="match-date" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="match-time">Hora</label>
+                            <input type="time" id="match-time" required />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="match-location">Cancha / Lugar</label>
+                        <input type="text" id="match-location" placeholder="Ej: Cancha Central AFEMEC" />
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i data-lucide="play-circle"></i>
+                        <span>Programar Partido</span>
+                    </button>
+                </form>
+                <div class="table-container" style="margin-top: 20px;">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th>Partido</th>
+                                <th>Fecha</th>
+                                <th>Hora</th>
+                                <th>Lugar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-partidos-admin">
+                            <tr>
+                                <td colspan="4" class="table-loading">Sin partidos programados</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </section>

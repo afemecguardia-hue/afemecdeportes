@@ -6,6 +6,8 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let atletaEncontrado = null;
 let configEdades = { ejecutivo: 30, senor: 40, master: 50 };
 let listaEquipos = [];
+let partidosProgramados = [];
+let equipoLogosLocal = {};
 
 // Normalización de la CI para evitar inconsistencias
 function normalizarCI(ci) {
@@ -72,7 +74,7 @@ async function buscarJugador() {
 
     const { data: atleta, error } = await supabaseClient
         .from('atletas')
-        .select('ci, nombre, tipo')
+        .select('ci, nombre, tipo, equipo')
         .eq('ci', ciInput)
         .single();
 
@@ -433,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function inicializarDatos() {
     await cargarConfigEdades();
     await cargarEquipos();
+    cargarPartidosProgramados();
     configurarEventosEdad();
     configurarEventosAdmin();
 }
@@ -486,6 +489,141 @@ function actualizarSelectEquipos() {
             select.innerHTML += `<option value="${eq.nombre}">${eq.nombre}</option>`;
         });
     }
+
+    // También actualizar selects de programación de partido
+    const homeSelect = document.getElementById('match-home');
+    const awaySelect = document.getElementById('match-away');
+    [homeSelect, awaySelect].forEach(selectEl => {
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">Seleccione un equipo</option>';
+        if (listaEquipos.length === 0) {
+            selectEl.innerHTML = '<option value="">No hay equipos registrados</option>';
+        } else {
+            listaEquipos.forEach(eq => {
+                selectEl.innerHTML += `<option value="${eq.nombre}">${eq.nombre}</option>`;
+            });
+        }
+    });
+}
+
+function cargarPartidosProgramados() {
+    const almacenados = localStorage.getItem('partidosProgramados');
+    partidosProgramados = almacenados ? JSON.parse(almacenados) : [];
+    renderizarPartidosAdmin();
+    actualizarSelectPartidosVeedor();
+    actualizarPromoBanner();
+}
+
+function guardarPartidosProgramadosLocal() {
+    localStorage.setItem('partidosProgramados', JSON.stringify(partidosProgramados));
+}
+
+function actualizarSelectPartidosVeedor() {
+    const select = document.getElementById('veedor-partido');
+    if (!select) return;
+    select.innerHTML = '<option value="">Elige un partido</option>';
+    partidosProgramados.forEach((p, index) => {
+        select.innerHTML += `<option value="${index}">${p.home} vs ${p.away} - ${p.date} ${p.time}</option>`;
+    });
+}
+
+function actualizarPromoBanner() {
+    const promoTitle = document.getElementById('promo-title');
+    const promoSubtitle = document.getElementById('promo-subtitle');
+    const promoFecha = document.getElementById('promo-fecha');
+    const promoHora = document.getElementById('promo-hora');
+    const promoLugar = document.getElementById('promo-lugar');
+    if (!promoTitle) return;
+
+    if (!partidosProgramados || partidosProgramados.length === 0) {
+        promoTitle.innerText = 'Partido Destacado';
+        promoSubtitle.innerText = 'Programa un partido desde el administrador para verlo aquí con estilo reflectivo y energía competitiva.';
+        promoFecha.innerText = 'Fecha: --';
+        promoHora.innerText = 'Hora: --';
+        promoLugar.innerText = 'Cancha: --';
+        return;
+    }
+
+    const next = partidosProgramados[0];
+    promoTitle.innerText = `${next.home} vs ${next.away}`;
+    promoSubtitle.innerText = 'No te pierdas este desafío épico con equipos top. ¡Goles y emoción en la cancha!';
+    promoFecha.innerText = `Fecha: ${next.date}`;
+    promoHora.innerText = `Hora: ${next.time}`;
+    promoLugar.innerText = `Cancha: ${next.location || 'Principal'}`;
+}
+
+function cargarLogosEquiposLocal() {
+    try {
+        return JSON.parse(localStorage.getItem('equipoLogos') || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarLogoEquipoLocal(nombre, logoData) {
+    const logos = cargarLogosEquiposLocal();
+    logos[nombre] = logoData;
+    localStorage.setItem('equipoLogos', JSON.stringify(logos));
+}
+
+function getLogoEquipo(nombre) {
+    const logos = cargarLogosEquiposLocal();
+    return logos[nombre] || null;
+}
+
+async function leerArchivoComoDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+async function reportarIncidencia() {
+    const partidoIndex = document.getElementById('veedor-partido').value;
+    if (!atletaEncontrado) {
+        alert('Busca al jugador antes de registrar la incidencia.');
+        return;
+    }
+    if (!partidoIndex) {
+        alert('Selecciona el partido en desarrollo.');
+        return;
+    }
+
+    const partido = partidosProgramados[Number(partidoIndex)];
+    const goles = Number(document.getElementById('veedor-goles').value) || 0;
+    const tarjeta = document.getElementById('veedor-tarjeta').value;
+
+    const incidencia = {
+        ci: atletaEncontrado.ci,
+        nombre: atletaEncontrado.nombre,
+        equipo: atletaEncontrado.equipo || 'N/D',
+        partido: `${partido.home} vs ${partido.away}`,
+        goles: goles,
+        tarjeta: tarjeta,
+        fecha: new Date().toLocaleString()
+    };
+
+    const incidencias = JSON.parse(localStorage.getItem('incidenciasVeedor') || '[]');
+    incidencias.unshift(incidencia);
+    localStorage.setItem('incidenciasVeedor', JSON.stringify(incidencias));
+
+    if (tarjeta !== 'ninguna') {
+        const monto = tarjeta === 'roja' ? 50000 : 20000;
+        const { error } = await supabaseClient.from('faltas').insert([{ ci_jugador: atletaEncontrado.ci, nombre_jugador: atletaEncontrado.nombre, tipo_falta: tarjeta, monto: monto, pagado: false }]);
+        if (error) {
+            console.warn('No se pudo guardar la falta en Supabase:', error.message);
+        }
+    }
+
+    alert(`Incidencia registrada:\nJugador: ${incidencia.nombre} (${incidencia.equipo})\nPartido: ${incidencia.partido}\nGoles: ${incidencia.goles}\nTarjeta: ${incidencia.tarjeta}`);
+    atletaEncontrado = null;
+    document.getElementById('resultado-busqueda').style.display = 'none';
+    document.getElementById('veedor-ci').value = '';
+    document.getElementById('veedor-goles').value = '0';
+    document.getElementById('veedor-tarjeta').value = 'ninguna';
+    document.getElementById('veedor-partido').value = '';
 }
 
 // Calcular la categoría basada en la edad y la configuración cargada
@@ -545,8 +683,16 @@ async function renderizarEquiposAdmin() {
         tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No hay equipos registrados</td></tr>';
     } else {
         equipos.forEach(eq => {
+            const logoData = getLogoEquipo(eq.nombre);
             tbody.innerHTML += `<tr>
-                <td><strong>${eq.nombre}</strong></td>
+                <td>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <div style="width:40px; height:40px; border-radius:6px; overflow:hidden; background:#fff; border:1px solid var(--border-color); display:flex; align-items:center; justify-content:center;">
+                            ${logoData ? `<img src="${logoData}" alt="${eq.nombre} Logo" style="width:100%; height:100%; object-fit:contain;" />` : '<span style="font-size:12px; color:var(--text-muted);">Logo</span>'}
+                        </div>
+                        <strong>${eq.nombre}</strong>
+                    </div>
+                </td>
                 <td style="text-align: right;"><button onclick="eliminarEquipo('${eq.id}', '${eq.nombre}')" class="btn-action" style="background-color: var(--danger-color); color: white;">Eliminar</button></td>
             </tr>`;
         });
@@ -555,7 +701,7 @@ async function renderizarEquiposAdmin() {
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
-}
+} 
 
 // Configurar los formularios del panel de administración
 function configurarEventosAdmin() {
@@ -617,8 +763,13 @@ function configurarEventosAdmin() {
             e.preventDefault();
             const input = document.getElementById('new-team-name');
             const nombre = input.value.trim().toUpperCase();
-            
+            const logoInput = document.getElementById('new-team-logo');
+            let logoData = null;
+
             if (!nombre) return;
+            if (logoInput && logoInput.files && logoInput.files[0]) {
+                logoData = await leerArchivoComoDataURL(logoInput.files[0]);
+            }
             
             const { data, error } = await supabaseClient
                 .from('equipos')
@@ -627,11 +778,45 @@ function configurarEventosAdmin() {
             if (error) {
                 alert("Error al agregar equipo: " + error.message);
             } else {
+                if (logoData) {
+                    guardarLogoEquipoLocal(nombre, logoData);
+                }
                 alert(`✅ Equipo "${nombre}" agregado correctamente`);
                 input.value = '';
+                if (logoInput) logoInput.value = '';
                 await renderizarEquiposAdmin();
                 await cargarEquipos(); // Recargar el dropdown de registro
+                actualizarPromoBanner();
             }
+        });
+    }
+
+    const formProgramarPartido = document.getElementById('form-programar-partido');
+    if (formProgramarPartido) {
+        formProgramarPartido.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const home = document.getElementById('match-home').value;
+            const away = document.getElementById('match-away').value;
+            const date = document.getElementById('match-date').value;
+            const time = document.getElementById('match-time').value;
+            const location = document.getElementById('match-location').value.trim();
+
+            if (!home || !away || !date || !time) {
+                alert('Completa todos los datos del partido.');
+                return;
+            }
+            if (home === away) {
+                alert('El equipo local y visitante deben ser distintos.');
+                return;
+            }
+
+            partidosProgramados.unshift({ home, away, date, time, location });
+            guardarPartidosProgramadosLocal();
+            renderizarPartidosAdmin();
+            actualizarSelectPartidosVeedor();
+            actualizarPromoBanner();
+            alert('✅ Partido programado correctamente');
+            this.reset();
         });
     }
 }
