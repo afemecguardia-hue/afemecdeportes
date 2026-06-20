@@ -4,6 +4,8 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Estado de la aplicación
 let atletaEncontrado = null;
+let configEdades = { ejecutivo: 30, senor: 40, master: 50 };
+let listaEquipos = [];
 
 // Normalización de la CI para evitar inconsistencias
 function normalizarCI(ci) {
@@ -41,6 +43,9 @@ function showSection(id) {
 
     if (id === 'caja') {
         actualizarListaCobros();
+    }
+    if (id === 'admin') {
+        cargarDatosAdmin();
     }
 
     // Renderizar iconos de Lucide
@@ -231,6 +236,7 @@ document.getElementById('form-login').addEventListener('submit', async function(
         // Ocultar primero todos los menús especiales
         document.getElementById('nav-veedor').style.display = 'none';
         document.getElementById('nav-caja').style.display = 'none';
+        document.getElementById('nav-admin').style.display = 'none';
         document.getElementById('admin-fixture').style.display = 'none';
         document.getElementById('admin-db-tools').style.display = 'none';
 
@@ -243,6 +249,7 @@ document.getElementById('form-login').addEventListener('submit', async function(
         } else if (userData.role === 'admin') {
             document.getElementById('nav-veedor').style.display = 'block';
             document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('nav-admin').style.display = 'block';
             document.getElementById('admin-fixture').style.display = 'block';
             document.getElementById('admin-db-tools').style.display = 'block';
             showSection('estadisticas');
@@ -282,10 +289,21 @@ document.getElementById('form-registro').addEventListener('submit', async functi
     e.preventDefault();
 
     const tipo = document.getElementById('reg-tipo').value;
+    const edad = parseInt(document.getElementById('reg-edad').value, 10);
+    const categoria = calcularCategoria(edad);
+    const equipo = document.getElementById('reg-equipo').value;
+
+    if (!equipo) {
+        alert("Por favor, seleccione un equipo.");
+        return;
+    }
+
     const nuevoAtleta = {
         ci: normalizarCI(document.getElementById('reg-ci').value),
         nombre: document.getElementById('reg-nombre').value.trim(),
-        edad: parseInt(document.getElementById('reg-edad').value, 10),
+        edad: edad,
+        categoria: categoria,
+        equipo: equipo,
         tipo: tipo,
         parentesco: tipo === 'aderente' ? document.getElementById('reg-parentesco').value : "N/A"
     };
@@ -301,6 +319,7 @@ document.getElementById('form-registro').addEventListener('submit', async functi
     } else {
         alert("✅ Atleta registrado en Supabase correctamente");
         this.reset();
+        document.getElementById('reg-categoria').value = '';
     }
 });
 
@@ -323,13 +342,15 @@ async function descargarExcelAtletas() {
             return str;
         };
 
-        let csvLines = ["CI,Nombre,Edad,Tipo,Parentesco,Fecha"];
+        let csvLines = ["CI,Nombre,Edad,Categoria,Equipo,Tipo,Parentesco,Fecha"];
         atletas.forEach(a => {
             const fechaFormateada = new Date(a.created_at).toLocaleDateString();
             const row = [
                 escapeCSV(a.ci),
                 escapeCSV(a.nombre),
                 escapeCSV(a.edad),
+                escapeCSV(a.categoria),
+                escapeCSV(a.equipo),
                 escapeCSV(a.tipo),
                 escapeCSV(a.parentesco),
                 escapeCSV(fechaFormateada)
@@ -368,6 +389,9 @@ function descargarApp() {
 
 // --- Inicialización al cargar la página ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Inicializar datos dinámicos de equipos y edades
+    inicializarDatos();
+
     // Mostrar la sección de registro por defecto
     showSection('registro');
 
@@ -376,6 +400,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userRole) {
         document.getElementById('nav-login').style.display = 'none';
         document.getElementById('nav-logout').style.display = 'block';
+
+        // Limpiar menús antes de activar
+        document.getElementById('nav-veedor').style.display = 'none';
+        document.getElementById('nav-caja').style.display = 'none';
+        document.getElementById('nav-admin').style.display = 'none';
 
         if (userRole === 'veedor') {
             document.getElementById('nav-veedor').style.display = 'block';
@@ -386,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (userRole === 'admin') {
             document.getElementById('nav-veedor').style.display = 'block';
             document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('nav-admin').style.display = 'block';
             document.getElementById('admin-fixture').style.display = 'block';
             document.getElementById('admin-db-tools').style.display = 'block';
             showSection('estadisticas');
@@ -396,3 +426,230 @@ document.addEventListener('DOMContentLoaded', () => {
         showSection('registro'); // O 'login' si quieres que el login sea la primera pantalla
     }
 });
+
+// --- FUNCIONES PARA GESTIÓN DE EQUIPOS Y CATEGORÍAS POR EDAD ---
+
+// Cargar configuraciones de edades y equipos al iniciar la página
+async function inicializarDatos() {
+    await cargarConfigEdades();
+    await cargarEquipos();
+    configurarEventosEdad();
+    configurarEventosAdmin();
+}
+
+// Cargar configuración de edades de Supabase
+async function cargarConfigEdades() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('categorias_config')
+            .select('*');
+        
+        if (!error && data && data.length > 0) {
+            data.forEach(item => {
+                if (item.categoria === 'ejecutivo') configEdades.ejecutivo = Number(item.edad_min);
+                if (item.categoria === 'senor') configEdades.senor = Number(item.edad_min);
+                if (item.categoria === 'master') configEdades.master = Number(item.edad_min);
+            });
+        }
+    } catch (e) {
+        console.warn("Fallo al cargar config de edades, usando valores por defecto:", e);
+    }
+}
+
+// Cargar equipos de Supabase
+async function cargarEquipos() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('equipos')
+            .select('*')
+            .order('nombre', { ascending: true });
+        
+        if (!error && data) {
+            listaEquipos = data;
+            actualizarSelectEquipos();
+        }
+    } catch (e) {
+        console.warn("Fallo al cargar equipos:", e);
+    }
+}
+
+// Actualizar el select desplegable en el formulario de inscripción
+function actualizarSelectEquipos() {
+    const select = document.getElementById('reg-equipo');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Seleccione un Equipo</option>';
+    if (listaEquipos.length === 0) {
+        select.innerHTML = '<option value="">No hay equipos registrados</option>';
+    } else {
+        listaEquipos.forEach(eq => {
+            select.innerHTML += `<option value="${eq.nombre}">${eq.nombre}</option>`;
+        });
+    }
+}
+
+// Calcular la categoría basada en la edad y la configuración cargada
+function calcularCategoria(edad) {
+    if (isNaN(edad) || edad <= 0) return '';
+    if (edad >= configEdades.master) return 'Master';
+    if (edad >= configEdades.senor) return 'Señor';
+    if (edad >= configEdades.ejecutivo) return 'Ejecutivo';
+    return 'Libre / Menor';
+}
+
+// Configurar los listeners en tiempo real para el campo de edad
+function configurarEventosEdad() {
+    const edadInput = document.getElementById('reg-edad');
+    const catInput = document.getElementById('reg-categoria');
+    
+    if (edadInput && catInput) {
+        const actualizarCat = () => {
+            const edad = parseInt(edadInput.value, 10);
+            catInput.value = calcularCategoria(edad);
+        };
+        edadInput.addEventListener('input', actualizarCat);
+        edadInput.addEventListener('change', actualizarCat);
+    }
+}
+
+// Carga los datos del panel de administración
+async function cargarDatosAdmin() {
+    // 1. Mostrar las edades configuradas en los inputs
+    document.getElementById('cfg-edad-ejecutivo').value = configEdades.ejecutivo;
+    document.getElementById('cfg-edad-senor').value = configEdades.senor;
+    document.getElementById('cfg-edad-master').value = configEdades.master;
+
+    // 2. Cargar y mostrar lista de equipos en la tabla de admin
+    await renderizarEquiposAdmin();
+}
+
+// Renderizar la tabla de equipos en administración
+async function renderizarEquiposAdmin() {
+    const tbody = document.getElementById('lista-equipos-admin');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="2" class="table-loading"><i data-lucide="loader-2" class="spin"></i> Cargando equipos...</td></tr>';
+    
+    const { data: equipos, error } = await supabaseClient
+        .from('equipos')
+        .select('*')
+        .order('nombre', { ascending: true });
+        
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="2" style="color: var(--danger-color); text-align: center;">Error al cargar equipos: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    if (!equipos || equipos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No hay equipos registrados</td></tr>';
+    } else {
+        equipos.forEach(eq => {
+            tbody.innerHTML += `<tr>
+                <td><strong>${eq.nombre}</strong></td>
+                <td style="text-align: right;"><button onclick="eliminarEquipo('${eq.id}', '${eq.nombre}')" class="btn-action" style="background-color: var(--danger-color); color: white;">Eliminar</button></td>
+            </tr>`;
+        });
+    }
+    
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+// Configurar los formularios del panel de administración
+function configurarEventosAdmin() {
+    // Guardar límites de edades
+    const formEdades = document.getElementById('form-config-edades');
+    if (formEdades) {
+        formEdades.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const ejecutivo = parseInt(document.getElementById('cfg-edad-ejecutivo').value, 10);
+            const senor = parseInt(document.getElementById('cfg-edad-senor').value, 10);
+            const master = parseInt(document.getElementById('cfg-edad-master').value, 10);
+            
+            // Validaciones lógicas básicas
+            if (ejecutivo >= senor || senor >= master) {
+                alert("⚠️ Validación de límites: Ejecutivo debe ser menor que Señor, y Señor menor que Master.");
+                return;
+            }
+            
+            // Guardar en Supabase cada categoría
+            const categorias = [
+                { categoria: 'ejecutivo', edad_min: ejecutivo },
+                { categoria: 'senor', edad_min: senor },
+                { categoria: 'master', edad_min: master }
+            ];
+            
+            let exito = true;
+            for (const cat of categorias) {
+                const { error } = await supabaseClient
+                    .from('categorias_config')
+                    .upsert([cat]);
+                if (error) {
+                    console.error("Error al guardar categoría:", cat.categoria, error);
+                    exito = false;
+                }
+            }
+            
+            if (exito) {
+                configEdades.ejecutivo = ejecutivo;
+                configEdades.senor = senor;
+                configEdades.master = master;
+                alert("✅ Configuración de edades guardada correctamente");
+                
+                // Actualizar la categoría en el formulario de inscripción en caso de estar editando
+                const edadInput = document.getElementById('reg-edad');
+                const catInput = document.getElementById('reg-categoria');
+                if (edadInput && catInput && edadInput.value) {
+                    catInput.value = calcularCategoria(parseInt(edadInput.value, 10));
+                }
+            } else {
+                alert("Hubo un error al guardar la configuración de algunas categorías.");
+            }
+        });
+    }
+    
+    // Agregar equipo
+    const formAgregarEquipo = document.getElementById('form-agregar-equipo');
+    if (formAgregarEquipo) {
+        formAgregarEquipo.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-team-name');
+            const nombre = input.value.trim().toUpperCase();
+            
+            if (!nombre) return;
+            
+            const { data, error } = await supabaseClient
+                .from('equipos')
+                .insert([{ nombre: nombre }]);
+                
+            if (error) {
+                alert("Error al agregar equipo: " + error.message);
+            } else {
+                alert(`✅ Equipo "${nombre}" agregado correctamente`);
+                input.value = '';
+                await renderizarEquiposAdmin();
+                await cargarEquipos(); // Recargar el dropdown de registro
+            }
+        });
+    }
+}
+
+// Eliminar equipo
+async function eliminarEquipo(id, nombre) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el equipo "${nombre}"?`)) return;
+    
+    const { error } = await supabaseClient
+        .from('equipos')
+        .delete()
+        .eq('id', id);
+        
+    if (error) {
+        alert("Error al eliminar equipo: " + error.message);
+    } else {
+        alert(`✅ Equipo "${nombre}" eliminado`);
+        await renderizarEquiposAdmin();
+        await cargarEquipos(); // Recargar el dropdown de registro
+    }
+}

@@ -69,6 +69,9 @@
                 <button id="nav-caja" style="display:none;" onclick="showSection('caja')" class="nav-btn nav-role-caja">
                     <i data-lucide="wallet"></i><span>Caja</span>
                 </button>
+                <button id="nav-admin" style="display:none;" onclick="showSection('admin')" class="nav-btn nav-role-admin">
+                    <i data-lucide="settings"></i><span>Administración</span>
+                </button>
                 <button onclick="descargarApp()" class="nav-btn" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);" id="btn-download-app">
                     <i data-lucide="download"></i><span>Descargar App</span>
                 </button>
@@ -145,6 +148,24 @@
                         <div class="input-icon-wrapper">
                             <i data-lucide="calendar-days" class="input-icon"></i>
                             <input type="number" id="reg-edad" required min="5" placeholder="Edad en años">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reg-categoria">Categoría Asignada</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="tag" class="input-icon"></i>
+                            <input type="text" id="reg-categoria" readonly placeholder="Calculando según edad..." style="font-weight: bold; color: var(--primary-light); background: #e2e8f0;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reg-equipo">Equipo *</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="shield" class="input-icon"></i>
+                            <select id="reg-equipo" required>
+                                <option value="">Cargando equipos...</option>
+                            </select>
                         </div>
                     </div>
 
@@ -411,6 +432,85 @@
                             <i data-lucide="map-pin"></i>
                             <span>Cancha 1</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN: ADMIN (CONFIGURACIÓN DE EQUIPOS Y EDADES) -->
+        <section id="admin" style="display:none;" class="section-card">
+            <div class="section-header-icon">
+                <i data-lucide="settings" class="icon-header-accent"></i>
+                <h2>Administración del Torneo</h2>
+                <p>Configura las categorías de edad y gestiona los equipos participantes del torneo.</p>
+            </div>
+            
+            <div class="admin-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                <!-- Columna Izquierda: Configuración de Edades -->
+                <div class="admin-card" style="background: #f8fafc; border: 1px solid var(--border-color); padding: 25px; border-radius: var(--radius-md);">
+                    <h3 class="table-title" style="margin-bottom: 20px;"><i data-lucide="calendar" style="vertical-align: middle; margin-right: 8px; width: 20px;"></i>Límites de Edad por Categoría</h3>
+                    <form id="form-config-edades" class="premium-form" style="max-width: 100%; gap: 15px;">
+                        <div class="form-group">
+                            <label for="cfg-edad-ejecutivo">Edad Mínima Ejecutivo *</label>
+                            <div class="input-icon-wrapper">
+                                <i data-lucide="user" class="input-icon"></i>
+                                <input type="number" id="cfg-edad-ejecutivo" required min="5" value="30">
+                            </div>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Por debajo de esta edad se considerará No Categorizado.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="cfg-edad-senor">Edad Mínima Señor *</label>
+                            <div class="input-icon-wrapper">
+                                <i data-lucide="user" class="input-icon"></i>
+                                <input type="number" id="cfg-edad-senor" required min="5" value="40">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cfg-edad-master">Edad Mínima Master *</label>
+                            <div class="input-icon-wrapper">
+                                <i data-lucide="user" class="input-icon"></i>
+                                <input type="number" id="cfg-edad-master" required min="5" value="50">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" style="margin-top: 10px;">
+                            <i data-lucide="save"></i>
+                            <span>Guardar Edades</span>
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Columna Derecha: Gestión de Equipos -->
+                <div class="admin-card" style="background: #f8fafc; border: 1px solid var(--border-color); padding: 25px; border-radius: var(--radius-md);">
+                    <h3 class="table-title" style="margin-bottom: 20px;"><i data-lucide="users" style="vertical-align: middle; margin-right: 8px; width: 20px;"></i>Equipos Registrados</h3>
+                    
+                    <form id="form-agregar-equipo" class="premium-form" style="max-width: 100%; display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px;">
+                        <div class="form-group" style="flex-grow: 1;">
+                            <div class="input-icon-wrapper">
+                                <i data-lucide="plus-circle" class="input-icon"></i>
+                                <input type="text" id="new-team-name" required placeholder="Nombre del Equipo (ej: PRESUPUESTO)" style="padding-left: 42px;">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" style="padding: 12px 20px; white-space: nowrap;">
+                            <i data-lucide="plus"></i> Agregar
+                        </button>
+                    </form>
+                    
+                    <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                        <table class="tabla-deportiva">
+                            <thead>
+                                <tr>
+                                    <th>Nombre del Equipo</th>
+                                    <th style="text-align: right; width: 80px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lista-equipos-admin">
+                                <tr>
+                                    <td colspan="2" class="table-loading">
+                                        <i data-lucide="loader-2" class="spin"></i> Cargando equipos...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
