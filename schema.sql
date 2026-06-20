@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 -- Habilitar acceso de lectura/escritura pública
+-- Habilitar acceso (ADVERTENCIA: Para producción se debe usar Supabase Auth y restringir esta tabla)
+-- En desarrollo rápido se habilita RLS con política permisiva, pero en producción se debe eliminar esta política.
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "Solo lectura para usuarios autenticados" ON public.users FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Permitir todo a todos en users" ON public.users
     FOR ALL USING (true) WITH CHECK (true);
 

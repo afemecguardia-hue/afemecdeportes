@@ -1,7 +1,15 @@
-// Configuración de Supabase (Reemplaza con tus credenciales)
 const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Estado de la aplicación
+let atletaEncontrado = null;
+
+// Normalización de la CI para evitar inconsistencias
+function normalizarCI(ci) {
+    if (!ci) return '';
+    return ci.replace(/[\s.,-]/g, '').trim();
+}
 
 // Cambiar entre secciones (Registro, Veedor, Caja, Estadísticas, Programación)
 function showSection(id) {
@@ -10,7 +18,7 @@ function showSection(id) {
         s.style.display = 'none';
         s.classList.remove('active');
     });
-    
+
     // Mostrar la sección seleccionada con clase active
     const targetSection = document.getElementById(id);
     if (targetSection) {
@@ -19,12 +27,12 @@ function showSection(id) {
             targetSection.classList.add('active');
         }, 10);
     }
-    
+
     // Actualizar botones de navegación
     document.querySelectorAll('.main-nav .nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    
+
     // Asignar active al botón correspondiente
     const activeBtn = document.getElementById(`btn-${id}`) || document.getElementById(`nav-${id}`);
     if (activeBtn) {
@@ -34,7 +42,7 @@ function showSection(id) {
     if (id === 'caja') {
         actualizarListaCobros();
     }
-    
+
     // Renderizar iconos de Lucide
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
@@ -50,45 +58,46 @@ function toggleAdherente() {
 
 // Simulación de búsqueda de jugador por CI para el Veedor
 async function buscarJugador() {
-    const ciInput = document.getElementById('veedor-ci').value;
-    
+    const ciInput = normalizarCI(document.getElementById('veedor-ci').value);
+
+    if (!ciInput) {
+        alert("Por favor, ingrese un número de CI.");
+        return;
+    }
+
     const { data: atleta, error } = await supabaseClient
         .from('atletas')
-        .select('nombre, tipo')
+        .select('ci, nombre, tipo')
         .eq('ci', ciInput)
         .single();
 
     if (atleta && !error) {
+        atletaEncontrado = atleta;
         document.getElementById('nombre-encontrado').innerText = `${atleta.nombre} (${atleta.tipo})`;
         document.getElementById('resultado-busqueda').style.display = 'block';
     } else {
+        atletaEncontrado = null;
         alert("Jugador no encontrado en la base de datos");
     }
 }
 
 // Función para cargar la falta en Supabase
 async function cargarFalta() {
-    const ci = document.getElementById('veedor-ci').value;
-    const tipo = document.getElementById('tipo-falta').value;
-    const monto = tipo === 'roja' ? 50000 : 20000; // Usar números para el monto
-
-    // Obtener el nombre del jugador de la base de datos
-    const { data: atleta, error: atletaError } = await supabaseClient
-        .from('atletas')
-        .select('nombre')
-        .eq('ci', ci)
-        .single();
-
-    if (atletaError || !atleta) {
-        alert("Error: No se pudo encontrar el nombre del jugador con CI: " + ci);
+    if (!atletaEncontrado) {
+        alert("Error: Primero debe buscar y encontrar al atleta.");
         return;
     }
 
-    const nombreJugador = atleta.nombre;
+    const radioOpt = document.querySelector('input[name="falta-opt"]:checked');
+    const tipo = radioOpt ? radioOpt.value : 'amarilla';
+    const monto = tipo === 'roja' ? 50000 : 20000;
+
+    const ci = atletaEncontrado.ci;
+    const nombreJugador = atletaEncontrado.nombre;
 
     // Guardar la falta en la tabla 'faltas' de Supabase
     const { data, error } = await supabaseClient
-        .from('faltas') // Asumiendo que tienes una tabla llamada 'faltas'
+        .from('faltas')
         .insert([
             { ci_jugador: ci, nombre_jugador: nombreJugador, tipo_falta: tipo, monto: monto, pagado: false }
         ]);
@@ -97,11 +106,9 @@ async function cargarFalta() {
         alert("Error al cargar la falta en Supabase: " + error.message);
     } else {
         alert("✅ Falta cargada en el sistema de caja (Supabase) correctamente");
-        // Opcional: Recargar la lista de cobros en la sección de Caja
-        // para que se muestre la nueva falta.
-        // Por ahora, solo ocultamos el resultado de búsqueda.
     }
-    
+
+    atletaEncontrado = null;
     document.getElementById('resultado-busqueda').style.display = 'none';
     document.getElementById('veedor-ci').value = ''; // Limpia el campo de CI
 }
@@ -258,7 +265,7 @@ function generarFixtureAutomatico() {
     const equipos = ["Halcones", "Dep. AFEMEC", "Fénix FC", "Titanes", "Libertadores", "Guaraní"];
     const contenedor = document.getElementById('calendario-juegos');
     contenedor.innerHTML = "<h3>Fixture Generado Temporada 2024</h3>";
-    
+
     // Simulación de emparejamiento Round Robin
     for(let i=0; i < equipos.length; i+=2) {
         contenedor.innerHTML += `
@@ -273,10 +280,10 @@ function generarFixtureAutomatico() {
 // Manejo del formulario de registro
 document.getElementById('form-registro').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
+
     const tipo = document.getElementById('reg-tipo').value;
     const nuevoAtleta = {
-        ci: document.getElementById('reg-ci').value.trim(),
+        ci: normalizarCI(document.getElementById('reg-ci').value),
         nombre: document.getElementById('reg-nombre').value.trim(),
         edad: parseInt(document.getElementById('reg-edad').value, 10),
         tipo: tipo,
@@ -305,13 +312,32 @@ async function descargarExcelAtletas() {
             .select('*')
             .order('created_at', { ascending: false });
 
-        if (atletas.length === 0) return alert("No hay datos.");
+        if (!atletas || atletas.length === 0) return alert("No hay datos.");
 
-        let csvContent = "data:text/csv;charset=utf-8,CI,Nombre,Edad,Tipo,Parentesco,Fecha\n";
+        const escapeCSV = (val) => {
+            if (val === null || val === undefined) return '""';
+            let str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        let csvLines = ["CI,Nombre,Edad,Tipo,Parentesco,Fecha"];
         atletas.forEach(a => {
             const fechaFormateada = new Date(a.created_at).toLocaleDateString();
-            csvContent += `${a.ci},${a.nombre},${a.edad},${a.tipo},${a.parentesco},${fechaFormateada}\n`;
+            const row = [
+                escapeCSV(a.ci),
+                escapeCSV(a.nombre),
+                escapeCSV(a.edad),
+                escapeCSV(a.tipo),
+                escapeCSV(a.parentesco),
+                escapeCSV(fechaFormateada)
+            ];
+            csvLines.push(row.join(','));
         });
+
+        const csvContent = "data:text/csv;charset=utf-8," + csvLines.join('\n');
 
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));
@@ -321,6 +347,22 @@ async function descargarExcelAtletas() {
         document.body.removeChild(link);
     } catch (e) {
         alert("Error al descargar los datos");
+    }
+}
+
+// Función para simular la descarga de la app móvil/escritorio con un prompt interactivo
+function descargarApp() {
+    const confirmar = confirm("¿Deseas descargar la aplicación oficial de AFEMEC Deportes para tu dispositivo?");
+    if (confirmar) {
+        alert("¡Iniciando la descarga de AFEMEC Deportes! Si la descarga no inicia automáticamente, por favor verifica los permisos de tu navegador.");
+        
+        // Descarga de archivo de texto mock con instrucciones
+        const link = document.createElement("a");
+        link.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent("Instrucciones para instalar AFEMEC Deportes:\n1. Si estás en Android, instala el archivo APK adjunto.\n2. Si estás en PC, abre index.html desde la carpeta principal para ejecutar la aplicación offline.\n3. Disfruta de la gestión del torneo."));
+        link.setAttribute("download", "Instalacion_AFEMEC_Deportes.txt");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 }
 
