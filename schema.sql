@@ -113,3 +113,77 @@ INSERT INTO public.equipos (nombre) VALUES
     ('Libertadores'),
     ('Guaraní')
 ON CONFLICT (nombre) DO NOTHING;
+
+-- ==========================================
+-- ACTUALIZACIONES Y NUEVAS TABLAS (VERSIÓN 4.0)
+-- ==========================================
+
+-- 7. Modificaciones a tablas existentes
+-- Permitir tipo 'adherente' en socios
+ALTER TABLE public.socios DROP CONSTRAINT IF EXISTS socios_tipo_check;
+ALTER TABLE public.socios ADD CONSTRAINT socios_tipo_check CHECK (tipo IN ('titular', 'conyuge', 'hijo', 'adherente'));
+
+-- Añadir edad y categoria a socios
+ALTER TABLE public.socios ADD COLUMN IF NOT EXISTS edad INTEGER DEFAULT 0;
+ALTER TABLE public.socios ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT '';
+
+-- Añadir logo_url a equipos
+ALTER TABLE public.equipos ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
+
+-- 8. Tabla de Configuración de Categorías
+CREATE TABLE IF NOT EXISTS public.categorias_config (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT UNIQUE NOT NULL,
+    edad_min INTEGER NOT NULL DEFAULT 0,
+    edad_max INTEGER NOT NULL DEFAULT 99,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.categorias_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a todos en categorias_config" ON public.categorias_config;
+CREATE POLICY "Permitir todo a todos en categorias_config" ON public.categorias_config
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- Categorías por defecto
+INSERT INTO public.categorias_config (nombre, edad_min, edad_max) VALUES
+    ('Libre', 0, 29),
+    ('Señor', 30, 39),
+    ('Master', 40, 99)
+ON CONFLICT (nombre) DO NOTHING;
+
+-- 9. Tabla de Canchas
+CREATE TABLE IF NOT EXISTS public.canchas (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.canchas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a todos en canchas" ON public.canchas;
+CREATE POLICY "Permitir todo a todos en canchas" ON public.canchas
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- Canchas por defecto
+INSERT INTO public.canchas (nombre) VALUES
+    ('Cancha 1'),
+    ('Cancha 2')
+ON CONFLICT (nombre) DO NOTHING;
+
+-- 10. Tabla de Partidos
+CREATE TABLE IF NOT EXISTS public.partidos (
+    id SERIAL PRIMARY KEY,
+    equipo_a_id UUID NOT NULL REFERENCES public.equipos(id) ON DELETE CASCADE,
+    equipo_b_id UUID NOT NULL REFERENCES public.equipos(id) ON DELETE CASCADE,
+    fecha_hora TIMESTAMPTZ NOT NULL,
+    cancha_id INTEGER NOT NULL REFERENCES public.canchas(id) ON DELETE CASCADE,
+    goles_a INTEGER DEFAULT 0,
+    goles_b INTEGER DEFAULT 0,
+    finalizado BOOLEAN DEFAULT false NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.partidos ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a todos en partidos" ON public.partidos;
+CREATE POLICY "Permitir todo a todos en partidos" ON public.partidos
+    FOR ALL USING (true) WITH CHECK (true);
+

@@ -91,12 +91,24 @@
                 addLog(`  Titulares: ${Math.min(i + B, arrT.length)}/${arrT.length}`);
             }
 
-            // ---- FAMILIA_ID = id para titulares ----
+            // ---- FAMILIA_ID = id para titulares (bulk SQL) ----
             addLog('Asignando familia_id...');
-            for (const [ci, id] of ciToId) {
-                await supa.from('socios').update({ familia_id: id }).eq('id', id);
+            const { error: famErr } = await supa.rpc('set_titular_familia_id');
+            if (famErr) {
+                // Fallback: si la función RPC no existe, lo hacemos en lotes pequeños
+                addLog('  (Usando modo alternativo por lotes...)');
+                const entries = Array.from(ciToId.entries());
+                const BATCH = 50;
+                for (let i = 0; i < entries.length; i += BATCH) {
+                    const batch = entries.slice(i, i + BATCH);
+                    await Promise.all(batch.map(([ci, id]) =>
+                        supa.from('socios').update({ familia_id: id }).eq('id', id)
+                    ));
+                    addLog(`  familia_id: ${Math.min(i + BATCH, entries.length)}/${entries.length}`);
+                }
+            } else {
+                addLog(`  ${ciToId.size} titulares actualizados`);
             }
-            addLog(`  ${ciToId.size} titulares actualizados`);
 
             // ---- INSERTAR FAMILIARES (usando mapa ci->id, sin SELECTs) ----
             async function insertarLote(lista, tabla, mapper) {

@@ -114,7 +114,7 @@
             <div class="section-header-icon">
                 <i data-lucide="user-plus" class="icon-header-accent"></i>
                 <h2>Inscripción de Atletas</h2>
-                <p>Buscá un socio titular por su CI para inscribirlo en un equipo del torneo.</p>
+                <p>Buscá un socio titular por su CI para inscribirlo y registrar sus adherentes.</p>
             </div>
 
             <div class="search-container">
@@ -134,23 +134,46 @@
                     </div>
                     <div>
                         <h4 id="insc-nombre">---</h4>
-                        <span>CI: <strong id="insc-ci-label"></strong> · Tipo: <strong id="insc-tipo"></strong></span>
+                        <span>CI Titular: <strong id="insc-ci-label"></strong> · Estado: <strong id="insc-estado-label"></strong></span>
+                        <div class="mt-1" style="font-size: 13px; font-weight: 500;">
+                            Cupo de Adherentes: <span id="insc-cupo-contador" style="font-weight: 700; color: var(--primary-color);">0 / 6</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="discipline-control">
+                <div id="insc-formulario-adherente" class="discipline-control">
+                    <h3 style="margin-bottom: 1rem; font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Cargar Datos del Atleta (Adherente)</h3>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div class="form-group">
+                            <label for="insc-atleta-nombre">Nombre y Apellido del Atleta</label>
+                            <input type="text" id="insc-atleta-nombre" class="form-input" placeholder="Nombre completo">
+                        </div>
+                        <div class="form-group">
+                            <label for="insc-atleta-ci">Cédula del Atleta</label>
+                            <input type="text" id="insc-atleta-ci" class="form-input" placeholder="CI del atleta">
+                        </div>
+                        <div class="form-group">
+                            <label for="insc-atleta-edad">Edad (Años)</label>
+                            <input type="number" id="insc-atleta-edad" class="form-input" min="0" max="99" placeholder="Ej. 25" oninput="calcularCategoriaAutomatica(this.value)">
+                            <small style="color:var(--primary-color); font-weight: 600; display: block; margin-top: 4px;">Categoría Estimada: <span id="insc-atleta-categoria-label">Libre</span></small>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label for="insc-equipo">Asignar a equipo</label>
                         <div class="flex-row">
                             <select id="insc-equipo" class="form-input" style="flex:1">
                                 <option value="">Seleccionar equipo...</option>
                             </select>
-                            <button onclick="inscribirAtleta()" class="btn-primary btn-sm">
+                            <button id="btn-inscribir-atleta" onclick="inscribirAtleta()" class="btn-primary btn-sm">
                                 <i data-lucide="check-circle-2"></i>
-                                <span>Inscribir</span>
+                                <span>Inscribir Atleta</span>
                             </button>
                         </div>
                     </div>
+                </div>
+
+                <div id="insc-cupo-lleno-msg" style="display:none; padding:1rem; background:#fee2e2; color:#991b1b; border-radius:8px; margin-top:1rem; text-align:center; font-weight:600;">
+                    ⚠️ Cupo lleno (6/6). Este socio titular ya ha alcanzado el límite máximo de 6 adherentes.
                 </div>
             </div>
         </section>
@@ -160,12 +183,15 @@
             <div class="section-header-icon">
                 <i data-lucide="settings" class="icon-header-accent"></i>
                 <h2>Panel de Administración</h2>
-                <p>Gestión de socios, equipos y búsqueda general.</p>
+                <p>Gestión de socios, equipos, categorías, canchas y programación de partidos.</p>
             </div>
 
-            <div class="admin-tabs">
+            <div class="admin-tabs" style="flex-wrap: wrap;">
                 <button class="active" onclick="switchAdminTab('socios', this)">Socios</button>
                 <button onclick="switchAdminTab('equipos', this)">Equipos</button>
+                <button onclick="switchAdminTab('categorias', this)">Categorías</button>
+                <button onclick="switchAdminTab('canchas', this)">Canchas</button>
+                <button onclick="switchAdminTab('partidos', this)">Partidos</button>
                 <button onclick="switchAdminTab('busqueda', this)">Búsqueda por CI</button>
             </div>
 
@@ -194,14 +220,128 @@
             <!-- TAB: EQUIPOS -->
             <div id="admin-tab-equipos" class="admin-tab-content">
                 <h3>Gestión de Equipos</h3>
-                <div class="flex-row mt-1">
-                    <input type="text" id="admin-nuevo-equipo" class="form-input" placeholder="Nombre del equipo" style="flex:1">
-                    <button onclick="agregarEquipo()" class="btn-primary btn-sm">Agregar</button>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Carga el nombre y el logo oficial para cada equipo del torneo.</p>
+                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px;">
+                        <label for="admin-nuevo-equipo" style="font-size:12px; font-weight:600; color:#64748b;">Nombre del Equipo</label>
+                        <input type="text" id="admin-nuevo-equipo" class="form-input" placeholder="Ej. Fénix FC">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px;">
+                        <label for="admin-logo-equipo" style="font-size:12px; font-weight:600; color:#64748b;">Logo (JPG, PNG, GIF - Máx. 500KB)</label>
+                        <input type="file" id="admin-logo-equipo" class="form-input" accept="image/png, image/jpeg, image/gif" style="padding: 4px;">
+                    </div>
+                    <button onclick="agregarEquipo()" class="btn-primary btn-sm" style="align-self: flex-end; height: 42px;">Agregar Equipo</button>
                 </div>
                 <div class="table-container mt-1">
                     <table class="tabla-deportiva">
-                        <thead><tr><th>ID</th><th>Nombre</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Logo</th><th>Nombre</th><th>Acciones</th></tr></thead>
                         <tbody id="admin-equipos-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: CATEGORÍAS -->
+            <div id="admin-tab-categorias" class="admin-tab-content">
+                <h3>Gestión de Categorías y Rangos de Edades</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Configura los rangos de edad para clasificar automáticamente a los atletas.</p>
+                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem;">
+                    <div style="flex: 2; display: flex; flex-direction: column; gap: 0.5rem; min-width: 150px;">
+                        <label for="admin-cat-nombre" style="font-size:12px; font-weight:600; color:#64748b;">Nombre de la Categoría</label>
+                        <input type="text" id="admin-cat-nombre" class="form-input" placeholder="Ej. Master">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
+                        <label for="admin-cat-min" style="font-size:12px; font-weight:600; color:#64748b;">Edad Mín.</label>
+                        <input type="number" id="admin-cat-min" class="form-input" placeholder="0">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
+                        <label for="admin-cat-max" style="font-size:12px; font-weight:600; color:#64748b;">Edad Máx.</label>
+                        <input type="number" id="admin-cat-max" class="form-input" placeholder="99">
+                    </div>
+                    <button onclick="agregarCategoria()" class="btn-primary btn-sm" style="align-self: flex-end; height: 42px;">Agregar</button>
+                </div>
+                <div class="table-container mt-1">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Edad Mínima</th>
+                                <th>Edad Máxima</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-categorias-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: CANCHAS -->
+            <div id="admin-tab-canchas" class="admin-tab-content">
+                <h3>Gestión de Canchas / Sedes</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Administra las canchas disponibles del predio deportivo.</p>
+                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem; align-items: flex-end;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label for="admin-cancha-nombre" style="font-size:12px; font-weight:600; color:#64748b;">Nombre de la Cancha</label>
+                        <input type="text" id="admin-cancha-nombre" class="form-input" placeholder="Ej. Cancha Principal">
+                    </div>
+                    <button onclick="agregarCancha()" class="btn-primary btn-sm" style="height: 42px;">Agregar Cancha</button>
+                </div>
+                <div class="table-container mt-1">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-canchas-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: PARTIDOS -->
+            <div id="admin-tab-partidos" class="admin-tab-content">
+                <h3>Programación de Fixture y Marcadores</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Calendariza los juegos y carga los resultados finales.</p>
+                
+                <div style="background: #f8fafc; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+                    <h4 style="margin-bottom: 1rem; font-size: 15px;">Programar Nuevo Partido</h4>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group">
+                            <label for="admin-partido-equipo-a">Equipo Local (A)</label>
+                            <select id="admin-partido-equipo-a" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-partido-equipo-b">Equipo Visitante (B)</label>
+                            <select id="admin-partido-equipo-b" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-partido-fecha">Fecha y Hora</label>
+                            <input type="datetime-local" id="admin-partido-fecha" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-partido-cancha">Cancha / Sede</label>
+                            <select id="admin-partido-cancha" class="form-input"></select>
+                        </div>
+                    </div>
+                    <button onclick="programarPartido()" class="btn-primary btn-block">
+                         Programar Partido
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th>Fecha / Hora</th>
+                                <th>Partido</th>
+                                <th>Resultado</th>
+                                <th>Cancha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-partidos-body"></tbody>
                     </table>
                 </div>
             </div>
@@ -337,26 +477,51 @@
         <section id="programacion" style="display:none;" class="section-card">
             <div class="section-header-icon">
                 <i data-lucide="calendar" class="icon-header-accent"></i>
-                <h2>Programación de Juegos</h2>
-                <p>Calendario oficial de partidos del torneo.</p>
+                <h2>Programación y Resultados</h2>
+                <p>Calendario oficial de partidos del torneo, resultados y tabla de posiciones en tiempo real.</p>
             </div>
 
-            <div id="calendario-juegos" class="fixture-timeline">
-                <div class="fecha-grupo">
-                    <h3>Sábado 25 de Mayo</h3>
-                    <div class="partido-card">
-                        <div class="partido-hora">
-                            <i data-lucide="clock"></i><span>15:00</span>
-                        </div>
-                        <div class="partido-versus">
-                            <span class="team">Halcones</span>
-                            <span class="vs">vs</span>
-                            <span class="team">Dep. AFEMEC</span>
-                        </div>
-                        <div class="partido-cancha">
-                            <i data-lucide="map-pin"></i><span>Cancha 1</span>
-                        </div>
-                    </div>
+            <div class="admin-tabs" style="margin-bottom: 1.5rem;">
+                <button class="active" id="btn-prog-proximos" onclick="switchProgTab('proximos', this)">Próximos Juegos</button>
+                <button id="btn-prog-resultados" onclick="switchProgTab('resultados', this)">Resultados y Tabla</button>
+            </div>
+
+            <!-- TAB: PRÓXIMOS JUEGOS -->
+            <div id="prog-tab-proximos" class="prog-tab-content">
+                <div id="calendario-juegos" class="fixture-timeline">
+                    <!-- Se carga dinámicamente -->
+                </div>
+            </div>
+
+            <!-- TAB: RESULTADOS Y TABLA -->
+            <div id="prog-tab-resultados" class="prog-tab-content" style="display:none;">
+                <div id="lista-resultados" class="fixture-timeline" style="margin-bottom: 2rem;">
+                    <!-- Se carga dinámicamente -->
+                </div>
+                
+                <h3 style="font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--text-dark); margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
+                    <i data-lucide="trophy" style="color:var(--accent-color)"></i> Tabla de Posiciones General
+                </h3>
+                <div class="table-container">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">Pos</th>
+                                <th>Equipo</th>
+                                <th style="text-align: center;">PJ</th>
+                                <th style="text-align: center;">PG</th>
+                                <th style="text-align: center;">PE</th>
+                                <th style="text-align: center;">PP</th>
+                                <th style="text-align: center;">GF</th>
+                                <th style="text-align: center;">GC</th>
+                                <th style="text-align: center;">DG</th>
+                                <th style="text-align: center; font-weight:700; color:var(--primary-color);">Pts</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-posiciones-body">
+                            <tr><td colspan="10" style="text-align:center;">Cargando tabla de posiciones...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </section>
@@ -380,19 +545,14 @@
         function switchAdminTab(tab, btn) {
             document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById('admin-tab-' + tab).classList.add('active');
+            document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
+            document.getElementById('admin-tab-' + tab).style.display = 'block';
+            
             if (tab === 'equipos') cargarEquiposAdmin();
             if (tab === 'socios') cargarListadoSocios();
-        }
-
-        async function cargarEquiposAdmin() {
-            const { data: equipos } = await supabaseClient.from('equipos').select('*').order('nombre');
-            const tbody = document.getElementById('admin-equipos-body');
-            tbody.innerHTML = '';
-            equipos.forEach(e => {
-                tbody.innerHTML += `<tr><td>${e.id}</td><td>${escHtml(e.nombre)}</td></tr>`;
-            });
+            if (tab === 'categorias') cargarCategoriasAdmin();
+            if (tab === 'canchas') cargarCanchasAdmin();
+            if (tab === 'partidos') cargarPartidosAdmin();
         }
     </script>
 </body>
