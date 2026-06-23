@@ -41,8 +41,12 @@ function showSection(id) {
 // ============================
 // INSCRIPCIÓN DE ATLETAS
 // ============================
+function limpiarCI(val) {
+    return val.trim().replace(/[.,\s]/g, '');
+}
+
 async function buscarSocioInscripcion() {
-    const ci = document.getElementById('insc-ci').value.trim();
+    const ci = limpiarCI(document.getElementById('insc-ci').value);
     if (!ci) return alert('Ingresá un número de CI');
 
     const { data: socio, error } = await supabaseClient
@@ -109,7 +113,7 @@ async function inscribirAtleta() {
 // VEEDOR (búsqueda + falta)
 // ============================
 async function buscarJugador() {
-    const ci = document.getElementById('veedor-ci').value.trim();
+    const ci = limpiarCI(document.getElementById('veedor-ci').value);
     const { data: socio, error } = await supabaseClient
         .from('socios')
         .select('nombre, apellido, tipo')
@@ -126,7 +130,7 @@ async function buscarJugador() {
 }
 
 async function cargarFalta() {
-    const ci = document.getElementById('veedor-ci').value.trim();
+    const ci = limpiarCI(document.getElementById('veedor-ci').value);
     const tipo = document.getElementById('tipo-falta').value;
     const monto = tipo === 'roja' ? 50000 : 20000;
 
@@ -255,7 +259,7 @@ async function agregarEquipo() {
 // ADMIN: BÚSQUEDA POR CI
 // ============================
 async function buscarSocioAdmin() {
-    const ci = document.getElementById('admin-buscar-ci').value.trim();
+    const ci = limpiarCI(document.getElementById('admin-buscar-ci').value);
     if (!ci) return alert('Ingresá un CI');
 
     const { data: socio, error } = await supabaseClient
