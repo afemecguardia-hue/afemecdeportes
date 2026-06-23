@@ -911,3 +911,22 @@ footer.app-footer p {
         gap: 5px;
     }
 }
+
+.form-input {
+    padding: 0.6rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: white;
+    transition: var(--transition);
+    outline: none;
+}
+.form-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.btn-sm {
+    padding: 0.45rem 0.9rem;
+    font-size: 13px;
+}

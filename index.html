@@ -4,21 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AFEMEC - Sistema de Torneo de Alto Rendimiento</title>
-    <!-- Google Fonts: Outfit (para títulos y acentos) e Inter (para texto de lectura) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <!-- Lucide Icons para una iconografía limpia y premium -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 26px; transition: .3s; }
+        .toggle-slider::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
+        .toggle-switch input:checked + .toggle-slider { background: #10b981; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .row-disabled { opacity: 0.5; }
+        .badge-status-socio { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge-status-socio.activo { background: #d1fae5; color: #065f46; }
+        .badge-status-socio.inactivo { background: #fee2e2; color: #991b1b; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .admin-full { grid-column: 1 / -1; }
+        .search-result-card { margin-top: 1rem; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
+        .info-item { padding: 0.75rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .info-item label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+        .info-item span { font-weight: 600; color: #1e293b; }
+        .btn-sm { padding: 0.35rem 0.75rem; font-size: 13px; }
+        .admin-tabs { display: flex; gap: 1px; margin-bottom: 1.5rem; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .admin-tabs button { flex: 1; padding: 0.6rem; border: none; background: transparent; font-weight: 600; cursor: pointer; transition: .2s; }
+        .admin-tabs button.active { background: white; color: var(--primary-color); }
+        .admin-tab-content { display: none; }
+        .admin-tab-content.active { display: block; }
+        .flex-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+        .mt-1 { margin-top: 1rem; }
+    </style>
 </head>
 <body>
-    <!-- HEADER Y NAVBAR PRINCIPAL -->
     <header class="app-header">
         <div class="header-container">
             <div class="brand">
                 <div class="logo-wrapper">
-                    <!-- Si la imagen falla, se muestra el fallback con icono de trofeo -->
                     <img src="logo-afemec.png" alt="Logo AFEMEC" id="main-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     <div class="logo-fallback" style="display:none;"><i data-lucide="trophy"></i></div>
                 </div>
@@ -27,22 +50,22 @@
                     <span class="badge-status">Gestión Deportiva</span>
                 </div>
             </div>
-            
+
             <nav class="main-nav">
                 <button onclick="showSection('registro')" class="nav-btn active" id="btn-registro">
                     <i data-lucide="user-plus"></i><span>Inscripción</span>
                 </button>
-                <button onclick="showSection('estadisticas')" class="nav-btn" id="btn-estadisticas">
-                    <i data-lucide="bar-chart-3"></i><span>Estadísticas</span>
-                </button>
-                <button onclick="showSection('programacion')" class="nav-btn" id="btn-programacion">
-                    <i data-lucide="calendar"></i><span>Programación</span>
+                <button id="nav-admin" style="display:none;" onclick="showSection('admin')" class="nav-btn nav-role-admin">
+                    <i data-lucide="settings"></i><span>Admin</span>
                 </button>
                 <button id="nav-veedor" style="display:none;" onclick="showSection('veedor')" class="nav-btn nav-role-veedor">
                     <i data-lucide="shield-alert"></i><span>Veedor</span>
                 </button>
                 <button id="nav-caja" style="display:none;" onclick="showSection('caja')" class="nav-btn nav-role-caja">
                     <i data-lucide="wallet"></i><span>Caja</span>
+                </button>
+                <button onclick="showSection('programacion')" class="nav-btn" id="btn-programacion">
+                    <i data-lucide="calendar"></i><span>Programación</span>
                 </button>
                 <div class="nav-separator"></div>
                 <button id="nav-login" onclick="showSection('login')" class="nav-btn btn-login">
@@ -55,15 +78,14 @@
         </div>
     </header>
 
-    <!-- CONTENEDOR PRINCIPAL -->
     <main class="app-main">
-        
-        <!-- SECCIÓN: LOGIN -->
+
+        <!-- ========== LOGIN ========== -->
         <section id="login" style="display:none;" class="section-card">
             <div class="section-header-icon">
                 <i data-lucide="lock" class="icon-header-accent"></i>
                 <h2>Acceso Personal AFEMEC</h2>
-                <p>Ingresa tus credenciales para acceder a funciones de administración, veeduría o caja.</p>
+                <p>Ingresá tus credenciales para acceder a funciones de administración, veeduría o caja.</p>
             </div>
             <form id="form-login" class="premium-form">
                 <div class="form-group">
@@ -87,83 +109,140 @@
             </form>
         </section>
 
-        <!-- SECCIÓN: REGISTRO DE ATLETAS -->
+        <!-- ========== INSCRIPCIÓN DE ATLETAS ========== -->
         <section id="registro" class="section-card active">
             <div class="section-header-icon">
                 <i data-lucide="user-plus" class="icon-header-accent"></i>
                 <h2>Inscripción de Atletas</h2>
-                <p>Completa el formulario para registrar un nuevo atleta en la base de datos del torneo.</p>
+                <p>Buscá un socio titular por su CI para inscribirlo en un equipo del torneo.</p>
             </div>
-            <form id="form-registro" class="premium-form">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="reg-ci">Cédula de Identidad (CI) *</label>
-                        <div class="input-icon-wrapper">
-                            <i data-lucide="credit-card" class="input-icon"></i>
-                            <input type="text" id="reg-ci" required placeholder="Ej: 1.234.567">
-                        </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="reg-nombre">Nombre Completo *</label>
-                        <div class="input-icon-wrapper">
-                            <i data-lucide="user" class="input-icon"></i>
-                            <input type="text" id="reg-nombre" required placeholder="Nombre y Apellido">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="reg-edad">Edad *</label>
-                        <div class="input-icon-wrapper">
-                            <i data-lucide="calendar-days" class="input-icon"></i>
-                            <input type="number" id="reg-edad" required min="5" placeholder="Edad en años">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="reg-tipo">Tipo de Miembro</label>
-                        <div class="input-icon-wrapper">
-                            <i data-lucide="users" class="input-icon"></i>
-                            <select id="reg-tipo" onchange="toggleAdherente()">
-                                <option value="socio">Socio</option>
-                                <option value="aderente">Adherente</option>
-                            </select>
-                        </div>
-                    </div>
+            <div class="search-container">
+                <div class="input-icon-wrapper">
+                    <i data-lucide="search" class="input-icon"></i>
+                    <input type="text" id="insc-ci" placeholder="CI del socio titular (ej. 76537)">
                 </div>
-
-                <div id="campo-adherente" style="display:none;" class="form-group-full fade-in">
-                    <div class="adherente-box">
-                        <label for="reg-parentesco">Parentesco (para Adherentes)</label>
-                        <div class="input-icon-wrapper">
-                            <i data-lucide="git-merge" class="input-icon"></i>
-                            <select id="reg-parentesco">
-                                <option value="hijo">Hijo/a</option>
-                                <option value="conyugue">Cónyuge</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-primary">
-                    <i data-lucide="check-circle-2"></i>
-                    <span>Completar Registro</span>
+                <button onclick="buscarSocioInscripcion()" class="btn-search">
+                    <span>Buscar Socio</span>
                 </button>
-            </form>
+            </div>
+
+            <div id="insc-resultado" class="search-result-card fade-in" style="display:none;">
+                <div class="player-info-card">
+                    <div class="avatar-placeholder">
+                        <i data-lucide="user"></i>
+                    </div>
+                    <div>
+                        <h4 id="insc-nombre">---</h4>
+                        <span>CI: <strong id="insc-ci-label"></strong> · Tipo: <strong id="insc-tipo"></strong></span>
+                    </div>
+                </div>
+
+                <div class="discipline-control">
+                    <div class="form-group">
+                        <label for="insc-equipo">Asignar a equipo</label>
+                        <div class="flex-row">
+                            <select id="insc-equipo" class="form-input" style="flex:1">
+                                <option value="">Seleccionar equipo...</option>
+                            </select>
+                            <button onclick="inscribirAtleta()" class="btn-primary btn-sm">
+                                <i data-lucide="check-circle-2"></i>
+                                <span>Inscribir</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
-        <!-- SECCIÓN: VEEDOR (CARGA DE FALTAS) -->
+        <!-- ========== ADMIN ========== -->
+        <section id="admin" style="display:none;" class="section-card">
+            <div class="section-header-icon">
+                <i data-lucide="settings" class="icon-header-accent"></i>
+                <h2>Panel de Administración</h2>
+                <p>Gestión de socios, equipos y búsqueda general.</p>
+            </div>
+
+            <div class="admin-tabs">
+                <button class="active" onclick="switchAdminTab('socios', this)">Socios</button>
+                <button onclick="switchAdminTab('equipos', this)">Equipos</button>
+                <button onclick="switchAdminTab('busqueda', this)">Búsqueda por CI</button>
+            </div>
+
+            <!-- TAB: SOCIOS -->
+            <div id="admin-tab-socios" class="admin-tab-content active">
+                <h3>Listado de Socios Titulares</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Usá los interruptores para habilitar o deshabilitar socios.</p>
+                <div class="table-container">
+                    <table class="tabla-deportiva">
+                        <thead>
+                            <tr>
+                                <th>CI</th>
+                                <th>Nombre</th>
+                                <th>Habilitado</th>
+                                <th>Estado</th>
+                                <th>Registro</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-socios-body">
+                            <tr><td colspan="5">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: EQUIPOS -->
+            <div id="admin-tab-equipos" class="admin-tab-content">
+                <h3>Gestión de Equipos</h3>
+                <div class="flex-row mt-1">
+                    <input type="text" id="admin-nuevo-equipo" class="form-input" placeholder="Nombre del equipo" style="flex:1">
+                    <button onclick="agregarEquipo()" class="btn-primary btn-sm">Agregar</button>
+                </div>
+                <div class="table-container mt-1">
+                    <table class="tabla-deportiva">
+                        <thead><tr><th>ID</th><th>Nombre</th></tr></thead>
+                        <tbody id="admin-equipos-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: BÚSQUEDA POR CI -->
+            <div id="admin-tab-busqueda" class="admin-tab-content">
+                <h3>Buscar Socio por CI</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Buscá por CI del socio titular o adherente.</p>
+                <div class="flex-row">
+                    <div class="input-icon-wrapper" style="flex:1">
+                        <i data-lucide="search" class="input-icon"></i>
+                        <input type="text" id="admin-buscar-ci" class="form-input" placeholder="Número de CI">
+                    </div>
+                    <button onclick="buscarSocioAdmin()" class="btn-search">Buscar</button>
+                </div>
+
+                <div id="admin-busqueda-resultado" class="search-result-card fade-in" style="display:none;margin-top:1rem">
+                    <div class="info-grid">
+                        <div class="info-item"><label>CI</label><span id="admin-busq-ci">-</span></div>
+                        <div class="info-item"><label>Nombre Completo</label><span id="admin-busq-nombre">-</span></div>
+                        <div class="info-item"><label>Tipo</label><span id="admin-busq-tipo">-</span></div>
+                        <div class="info-item"><label>Equipo</label><span id="admin-busq-equipo">-</span></div>
+                        <div class="info-item"><label>Estado</label><span id="admin-busq-estado">-</span></div>
+                        <div class="info-item"><label>Familiares</label><span id="admin-busq-familia">-</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== VEEDOR ========== -->
         <section id="veedor" style="display:none;" class="section-card">
             <div class="section-header-icon">
                 <i data-lucide="shield-alert" class="icon-header-accent"></i>
                 <h2>Carga de Faltas (Veedor)</h2>
-                <p>Busca un jugador por su número de Cédula para asignarle una sanción disciplinaria.</p>
+                <p>Buscá un jugador por su CI para asignarle una sanción disciplinaria.</p>
             </div>
-            
+
             <div class="search-container">
                 <div class="input-icon-wrapper">
                     <i data-lucide="search" class="input-icon"></i>
-                    <input type="text" id="veedor-ci" placeholder="Ingresar CI del jugador (ej. 1.234.567)">
+                    <input type="text" id="veedor-ci" placeholder="CI del jugador">
                 </div>
                 <button onclick="buscarJugador()" class="btn-search">
                     <span>Buscar</span>
@@ -177,34 +256,33 @@
                     </div>
                     <div>
                         <h4 id="nombre-encontrado">Cargando...</h4>
-                        <span class="player-label">Atleta Registrado</span>
+                        <span class="player-label">Jugador</span>
                     </div>
                 </div>
-                
+
                 <div class="discipline-control">
                     <div class="form-group">
-                        <label for="tipo-falta">Tipo de Sanción / Tarjeta</label>
+                        <label>Tipo de Sanción</label>
                         <div class="card-select-grid">
                             <label class="card-option yellow">
-                                <input type="radio" name="falta-opt" value="amarilla" checked id="tipo-falta-amarilla">
+                                <input type="radio" name="falta-opt" value="amarilla" checked>
                                 <span class="card-box"></span>
                                 <span class="card-text">Amarilla <br><small>20.000 GS.</small></span>
                             </label>
                             <label class="card-option blue">
-                                <input type="radio" name="falta-opt" value="azul" id="tipo-falta-azul">
+                                <input type="radio" name="falta-opt" value="azul">
                                 <span class="card-box"></span>
                                 <span class="card-text">Azul (2 min) <br><small>20.000 GS.</small></span>
                             </label>
                             <label class="card-option red">
-                                <input type="radio" name="falta-opt" value="roja" id="tipo-falta-roja">
+                                <input type="radio" name="falta-opt" value="roja">
                                 <span class="card-box"></span>
                                 <span class="card-text">Roja <br><small>50.000 GS.</small></span>
                             </label>
                         </div>
                     </div>
-                    
-                    <!-- Campo oculto para compatibilidad con código existente que lee select -->
-                    <select id="tipo-falta" style="display: none;">
+
+                    <select id="tipo-falta" style="display:none;">
                         <option value="amarilla">Amarilla</option>
                         <option value="azul">Azul</option>
                         <option value="roja">Roja</option>
@@ -212,165 +290,55 @@
 
                     <button onclick="cargarFaltaUI()" class="btn-danger btn-block">
                         <i data-lucide="plus-circle"></i>
-                        <span>Cargar Falta al CI</span>
+                        <span>Cargar Falta</span>
                     </button>
                 </div>
             </div>
         </section>
 
-        <!-- SECCIÓN: CAJA (COBROS) -->
+        <!-- ========== CAJA ========== -->
         <section id="caja" style="display:none;" class="section-card">
             <div class="section-header-icon">
                 <i data-lucide="wallet" class="icon-header-accent"></i>
                 <h2>Arqueo de Caja / Cobro de Multas</h2>
-                <p>Visualiza y gestiona las deudas de tarjetas cobradas en el torneo en tiempo real.</p>
+                <p>Visualizá y gestioná las deudas de tarjetas en tiempo real.</p>
             </div>
 
-            <!-- KPI Widget Recaudación -->
             <div class="kpi-card">
                 <div class="kpi-icon">
                     <i data-lucide="badge-dollar-sign"></i>
                 </div>
                 <div class="kpi-details">
-                    <span class="kpi-label">TOTAL RECAUDADO HOY</span>
+                    <span class="kpi-label">TOTAL RECAUDADO</span>
                     <strong class="kpi-value" id="total-hoy">0 GS.</strong>
                 </div>
             </div>
 
-            <h3 class="table-title">Deudas Pendientes de Pago</h3>
+            <h3 class="table-title">Deudas Pendientes</h3>
             <div class="table-container">
                 <table class="tabla-deportiva">
                     <thead>
                         <tr>
                             <th>CI Jugador</th>
-                            <th>Nombre Atleta</th>
+                            <th>Nombre</th>
                             <th>Falta</th>
                             <th class="monto-col">Monto</th>
                             <th>Acción</th>
                         </tr>
                     </thead>
                     <tbody id="lista-cobros">
-                        <tr>
-                            <td colspan="5" class="table-loading">
-                                <i data-lucide="loader-2" class="spin"></i> Cargando deudas...
-                            </td>
-                        </tr>
+                        <tr><td colspan="5" class="table-loading"><i data-lucide="loader-2" class="spin"></i> Cargando deudas...</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <!-- SECCIÓN: ESTADÍSTICAS -->
-        <section id="estadisticas" style="display:none;" class="section-card">
-            <div class="section-header-icon">
-                <i data-lucide="bar-chart-3" class="icon-header-accent"></i>
-                <h2>Tabla de Posiciones</h2>
-                <p>Resultados y clasificaciones generales actualizados de la temporada activa.</p>
-            </div>
-            
-            <div class="filtros-container">
-                <div class="form-group-inline">
-                    <label for="filtro-temporada">Temporada</label>
-                    <select id="filtro-temporada">
-                        <option value="apertura2024">Apertura 2024</option>
-                        <option value="clausura2024">Clausura 2024</option>
-                    </select>
-                </div>
-                
-                <div id="admin-db-tools" style="display:none;">
-                    <button onclick="descargarExcelAtletas()" class="btn-success">
-                        <i data-lucide="download"></i>
-                        <span>Exportar Atletas (Excel/CSV)</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="table-container">
-                <table class="tabla-deportiva text-center-cols">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">Pos</th>
-                            <th style="text-align: left;">Equipo</th>
-                            <th>PJ</th>
-                            <th>G</th>
-                            <th>E</th>
-                            <th>P</th>
-                            <th class="pts-col">Pts</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-posiciones-body">
-                        <tr class="top-row">
-                            <td><span class="pos-badge gold">1</span></td>
-                            <td style="text-align: left; font-weight: 600;">Los Halcones</td>
-                            <td>5</td>
-                            <td>4</td>
-                            <td>1</td>
-                            <td>0</td>
-                            <td class="pts-col"><strong>13</strong></td>
-                        </tr>
-                        <tr class="top-row">
-                            <td><span class="pos-badge silver">2</span></td>
-                            <td style="text-align: left; font-weight: 600;">Dep. AFEMEC</td>
-                            <td>5</td>
-                            <td>3</td>
-                            <td>0</td>
-                            <td>2</td>
-                            <td class="pts-col"><strong>9</strong></td>
-                        </tr>
-                        <tr>
-                            <td><span class="pos-badge">3</span></td>
-                            <td style="text-align: left;">Fénix FC</td>
-                            <td>5</td>
-                            <td>2</td>
-                            <td>1</td>
-                            <td>2</td>
-                            <td class="pts-col">7</td>
-                        </tr>
-                        <tr>
-                            <td><span class="pos-badge">4</span></td>
-                            <td style="text-align: left;">Titanes</td>
-                            <td>5</td>
-                            <td>2</td>
-                            <td>0</td>
-                            <td>3</td>
-                            <td class="pts-col">6</td>
-                        </tr>
-                        <tr>
-                            <td><span class="pos-badge">5</span></td>
-                            <td style="text-align: left;">Libertadores</td>
-                            <td>5</td>
-                            <td>1</td>
-                            <td>1</td>
-                            <td>3</td>
-                            <td class="pts-col">4</td>
-                        </tr>
-                        <tr>
-                            <td><span class="pos-badge">6</span></td>
-                            <td style="text-align: left;">Guaraní</td>
-                            <td>5</td>
-                            <td>1</td>
-                            <td>0</td>
-                            <td>4</td>
-                            <td class="pts-col">3</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- SECCIÓN: PROGRAMACIÓN -->
+        <!-- ========== PROGRAMACIÓN ========== -->
         <section id="programacion" style="display:none;" class="section-card">
             <div class="section-header-icon">
                 <i data-lucide="calendar" class="icon-header-accent"></i>
                 <h2>Programación de Juegos</h2>
-                <p>Calendario oficial de partidos del torneo y asignación de canchas.</p>
-            </div>
-            
-            <div id="admin-fixture" style="display:none;" class="admin-fixture-box">
-                <button onclick="generarFixtureAutomatico()" class="btn-secondary">
-                    <i data-lucide="refresh-cw"></i>
-                    <span>Generar Fixture Automático (Simulado)</span>
-                </button>
+                <p>Calendario oficial de partidos del torneo.</p>
             </div>
 
             <div id="calendario-juegos" class="fixture-timeline">
@@ -378,8 +346,7 @@
                     <h3>Sábado 25 de Mayo</h3>
                     <div class="partido-card">
                         <div class="partido-hora">
-                            <i data-lucide="clock"></i>
-                            <span>15:00</span>
+                            <i data-lucide="clock"></i><span>15:00</span>
                         </div>
                         <div class="partido-versus">
                             <span class="team">Halcones</span>
@@ -387,32 +354,45 @@
                             <span class="team">Dep. AFEMEC</span>
                         </div>
                         <div class="partido-cancha">
-                            <i data-lucide="map-pin"></i>
-                            <span>Cancha 1</span>
+                            <i data-lucide="map-pin"></i><span>Cancha 1</span>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
+
     </main>
 
-    <!-- FOOTER E INFORMACIÓN -->
     <footer class="app-footer">
         <p>&copy; 2026 Asociación de Funcionarios del Ministerio de Educación y Ciencias (AFEMEC).</p>
-        <p>Todos los derechos reservados. Sistema desarrollado con tecnología deportiva de vanguardia.</p>
+        <p>Todos los derechos reservados.</p>
     </footer>
 
-    <!-- Supabase Client y script principal -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
     <script>
-        // Adaptador para el radio de tarjetas disciplinares en Veedor
         function cargarFaltaUI() {
-            // Sincronizar el radio button seleccionado con el select oculto
             const radioVal = document.querySelector('input[name="falta-opt"]:checked').value;
             document.getElementById('tipo-falta').value = radioVal;
-            // Ejecutar la función original
             cargarFalta();
+        }
+
+        function switchAdminTab(tab, btn) {
+            document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('admin-tab-' + tab).classList.add('active');
+            if (tab === 'equipos') cargarEquiposAdmin();
+            if (tab === 'socios') cargarListadoSocios();
+        }
+
+        async function cargarEquiposAdmin() {
+            const { data: equipos } = await supabaseClient.from('equipos').select('*').order('nombre');
+            const tbody = document.getElementById('admin-equipos-body');
+            tbody.innerHTML = '';
+            equipos.forEach(e => {
+                tbody.innerHTML += `<tr><td>${e.id}</td><td>${escHtml(e.nombre)}</td></tr>`;
+            });
         }
     </script>
 </body>

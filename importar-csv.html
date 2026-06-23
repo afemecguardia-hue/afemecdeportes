@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Importar CSV - AFEMEC</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto; font-size: 12px; }
+        .ok { color: #16a34a; }
+        .err { color: #dc2626; }
+        button { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { opacity: 0.5; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1rem 0; }
+        .stat { text-align: center; padding: 1rem; background: #f0fdf4; border-radius: 8px; }
+        .stat span { display: block; font-size: 1.5rem; font-weight: bold; color: #16a34a; }
+        input[type="file"] { margin: 1rem 0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Importar CSV de Socios a Supabase</h2>
+        <p>Selecciona el archivo <strong>SOCIOS ACTIVOS UNIFICADOS 17.06.csv</strong></p>
+        <input type="file" id="csvFile" accept=".csv">
+        <button id="btnImport" onclick="importar()">Importar</button>
+        <div id="status"></div>
+        <div class="stats" id="stats" style="display:none">
+            <div class="stat"><span id="s-titulares">0</span>Titulares</div>
+            <div class="stat"><span id="s-conyuges">0</span>Cónyuges</div>
+            <div class="stat"><span id="s-hijos">0</span>Hijos</div>
+            <div class="stat"><span id="s-padres">0</span>Padres</div>
+        </div>
+    </div>
+    <div class="card">
+        <h3>Log</h3>
+        <pre id="log"></pre>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const log = document.getElementById('log');
+
+        function addLog(msg, type = '') {
+            log.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        async function importar() {
+            const fileInput = document.getElementById('csvFile');
+            const btn = document.getElementById('btnImport');
+
+            if (!fileInput.files.length) {
+                addLog('Seleccioná un archivo CSV primero', 'err');
+                return;
+            }
+
+            btn.disabled = true;
+            const text = await fileInput.files[0].text();
+            const lines = text.split('\n').filter(l => l.trim());
+            addLog(`Archivo cargado: ${lines.length} líneas`);
+
+            // Skip group header (line 1) and column header (line 2)
+            const dataLines = lines.slice(2);
+            addLog(`Filas de datos: ${dataLines.length}`);
+
+            let stats = { titulares: 0, conyuges: 0, hijos: 0, padres: 0, errores: 0, duplicados: 0 };
+            let titularesInsertados = new Set(); // track CI de titulares ya insertados
+
+            for (let i = 0; i < dataLines.length; i++) {
+                const row = parseCSVLine(dataLines[i]);
+                if (row.length < 19) continue;
+
+                const ciTitular = cleanNum(row[0]);
+                const nomTitular = row[1].trim();
+                const apeTitular = row[2].trim();
+                const conyugeCi = cleanNum(row[4]);
+                const conyugeNom = row[5].trim();
+                const conyugeApe = row[6].trim();
+                const padreNom = row[8].trim();
+                const padreApe = row[9].trim();
+                const padreCi = cleanNum(row[10]);
+                const madreNom = row[12].trim();
+                const madreApe = row[13].trim();
+                const madreCi = cleanNum(row[14]);
+                const hijoCi = cleanNum(row[16]);
+                const hijoNom = row[17].trim();
+                const hijoApe = row[18].trim();
+
+                // Skip empty rows
+                if (!ciTitular && !nomTitular) continue;
+
+                try {
+                    // --- INSERTAR TITULAR (solo una vez por CI) ---
+                    let titularId;
+                    if (ciTitular && !titularesInsertados.has(ciTitular)) {
+                        const { data: existing } = await supabase
+                            .from('socios')
+                            .select('id')
+                            .eq('ci', ciTitular)
+                            .eq('tipo', 'titular')
+                            .maybeSingle();
+
+                        if (existing) {
+                            titularId = existing.id;
+                            stats.duplicados++;
+                        } else {
+                            const { data: newTitular, error: errT } = await supabase
+                                .from('socios')
+                                .insert({ ci: ciTitular, nombre: nomTitular, apellido: apeTitular, tipo: 'titular' })
+                                .select()
+                                .single();
+
+                            if (errT) throw errT;
+                            titularId = newTitular.id;
+                            stats.titulares++;
+                        }
+                        titularesInsertados.add(ciTitular);
+
+                        // Update familia_id to self
+                        await supabase.from('socios').update({ familia_id: titularId }).eq('id', titularId);
+                    } else if (titularesInsertados.has(ciTitular)) {
+                        // Get existing titular ID for this CI
+                        const { data: t } = await supabase
+                            .from('socios')
+                            .select('id')
+                            .eq('ci', ciTitular)
+                            .eq('tipo', 'titular')
+                            .single();
+                        titularId = t.id;
+                    }
+
+                    if (!titularId) continue;
+
+                    // --- INSERTAR CONYUGE ---
+                    if (conyugeNom && conyugeNom !== '0') {
+                        const { data: existingC } = await supabase
+                            .from('socios')
+                            .select('id')
+                            .eq('nombre', conyugeNom)
+                            .eq('apellido', conyugeApe)
+                            .eq('tipo', 'conyuge')
+                            .eq('familia_id', titularId)
+                            .maybeSingle();
+
+                        if (!existingC) {
+                            await supabase.from('socios').insert({
+                                ci: conyugeCi || '',
+                                nombre: conyugeNom,
+                                apellido: conyugeApe || '',
+                                tipo: 'conyuge',
+                                familia_id: titularId
+                            });
+                            stats.conyuges++;
+                        }
+                    }
+
+                    // --- INSERTAR HIJO ---
+                    if (hijoNom && hijoNom !== '0') {
+                        const { data: existingH } = await supabase
+                            .from('socios')
+                            .select('id')
+                            .eq('nombre', hijoNom)
+                            .eq('apellido', hijoApe)
+                            .eq('tipo', 'hijo')
+                            .eq('familia_id', titularId)
+                            .maybeSingle();
+
+                        if (!existingH) {
+                            await supabase.from('socios').insert({
+                                ci: hijoCi || '',
+                                nombre: hijoNom,
+                                apellido: hijoApe || '',
+                                tipo: 'hijo',
+                                familia_id: titularId
+                            });
+                            stats.hijos++;
+                        }
+                    }
+
+                    // --- INSERTAR PADRE ---
+                    if (padreNom && padreNom !== '0') {
+                        const { data: existingP } = await supabase
+                            .from('padres_titular')
+                            .select('id')
+                            .eq('titular_id', titularId)
+                            .eq('nombre', padreNom)
+                            .eq('tipo', 'padre')
+                            .maybeSingle();
+
+                        if (!existingP) {
+                            await supabase.from('padres_titular').insert({
+                                titular_id: titularId,
+                                nombre: padreNom,
+                                apellido: padreApe || '',
+                                ci: padreCi || '',
+                                tipo: 'padre'
+                            });
+                            stats.padres++;
+                        }
+                    }
+
+                    // --- INSERTAR MADRE ---
+                    if (madreNom && madreNom !== '0') {
+                        const { data: existingM } = await supabase
+                            .from('padres_titular')
+                            .select('id')
+                            .eq('titular_id', titularId)
+                            .eq('nombre', madreNom)
+                            .eq('tipo', 'madre')
+                            .maybeSingle();
+
+                        if (!existingM) {
+                            await supabase.from('padres_titular').insert({
+                                titular_id: titularId,
+                                nombre: madreNom,
+                                apellido: madreApe || '',
+                                ci: madreCi || '',
+                                tipo: 'madre'
+                            });
+                            stats.padres++;
+                        }
+                    }
+
+                    if ((i + 1) % 100 === 0) addLog(`Procesados ${i + 1}/${dataLines.length}...`);
+
+                } catch (e) {
+                    stats.errores++;
+                    addLog(`Error fila ${i + 3}: ${e.message}`, 'err');
+                }
+            }
+
+            addLog('--- IMPORTACIÓN COMPLETADA ---', 'ok');
+            addLog(`Titulares: ${stats.titulares} | Cónyuges: ${stats.conyuges} | Hijos: ${stats.hijos} | Padres: ${stats.padres} | Duplicados: ${stats.duplicados} | Errores: ${stats.errores}`);
+
+            document.getElementById('stats').style.display = 'grid';
+            document.getElementById('s-titulares').textContent = stats.titulares;
+            document.getElementById('s-conyuges').textContent = stats.conyuges;
+            document.getElementById('s-hijos').textContent = stats.hijos;
+            document.getElementById('s-padres').textContent = stats.padres;
+
+            btn.disabled = false;
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') {
+                    inQuotes = !inQuotes;
+                } else if (ch === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            result.push(current);
+            return result;
+        }
+
+        function cleanNum(val) {
+            val = val.trim();
+            if (val === '0' || val === '') return '';
+            return val.replace(/[.,\s]/g, '').trim();
+        }
+    </script>
+</body>
+</html>

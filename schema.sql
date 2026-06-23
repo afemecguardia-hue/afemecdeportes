@@ -1,64 +1,109 @@
 -- ==========================================
 -- SCRIPT DE CREACIÓN DE TABLAS PARA SUPABASE
 -- Proyecto: AFEMEC Deportes
+-- Versión: 3.0 - Gestión de Socios y Atletas
 -- ==========================================
 
--- 1. Tabla de Atletas (Inscripciones)
-CREATE TABLE IF NOT EXISTS public.atletas (
-    ci TEXT PRIMARY KEY,                          -- Cédula de Identidad (ej. "1.234.567" o "1234567")
-    nombre TEXT NOT NULL,                         -- Nombre Completo
-    edad INTEGER NOT NULL,                        -- Edad en años
-    tipo TEXT NOT NULL CHECK (tipo IN ('socio', 'aderente')), -- Tipo de Miembro
-    parentesco TEXT DEFAULT 'N/A',                -- Parentesco para adherentes
-    created_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Fecha de creación
+-- 1. Tabla de Socios (titulares, cónyuges e hijos)
+CREATE TABLE IF NOT EXISTS public.socios (
+    id SERIAL PRIMARY KEY,
+    ci TEXT DEFAULT '',
+    nombre TEXT NOT NULL,
+    apellido TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL CHECK (tipo IN ('titular', 'conyuge', 'hijo')),
+    familia_id INTEGER REFERENCES public.socios(id),
+    habilitado BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- Habilitar acceso de lectura/escritura pública (opcional para pruebas sin RLS restrictivo)
+ALTER TABLE public.socios ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a todos en socios" ON public.socios
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- 2. Tabla de Padres del Titular
+CREATE TABLE IF NOT EXISTS public.padres_titular (
+    id SERIAL PRIMARY KEY,
+    titular_id INTEGER NOT NULL REFERENCES public.socios(id) ON DELETE CASCADE,
+    nombre TEXT NOT NULL,
+    apellido TEXT NOT NULL DEFAULT '',
+    ci TEXT DEFAULT '',
+    tipo TEXT NOT NULL CHECK (tipo IN ('padre', 'madre')),
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.padres_titular ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a todos en padres_titular" ON public.padres_titular
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. Tabla de Equipos
+CREATE TABLE IF NOT EXISTS public.equipos (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.equipos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a todos en equipos" ON public.equipos
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. Tabla de Inscripción de Atletas (vincula socio + equipo)
+CREATE TABLE IF NOT EXISTS public.atletas (
+    id SERIAL PRIMARY KEY,
+    socio_id INTEGER NOT NULL REFERENCES public.socios(id),
+    equipo_id INTEGER NOT NULL REFERENCES public.equipos(id),
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    UNIQUE(socio_id, equipo_id)
+);
+
 ALTER TABLE public.atletas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir todo a todos en atletas" ON public.atletas
     FOR ALL USING (true) WITH CHECK (true);
 
-
--- 2. Tabla de Faltas (Multas Disciplinarias)
+-- 5. Tabla de Faltas (Multas Disciplinarias)
 CREATE TABLE IF NOT EXISTS public.faltas (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- ID Único autogenerado
-    ci_jugador TEXT NOT NULL,                     -- CI del Jugador sancionado
-    nombre_jugador TEXT NOT NULL,                 -- Nombre del Jugador
-    tipo_falta TEXT NOT NULL,                     -- 'amarilla', 'azul', 'roja'
-    monto NUMERIC NOT NULL DEFAULT 20000,         -- Monto de la multa (ej: 20000 o 50000)
-    pagado BOOLEAN DEFAULT false NOT NULL,        -- Estado de pago (true = cobrado)
-    created_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Fecha de registro
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ci_jugador TEXT NOT NULL,
+    nombre_jugador TEXT NOT NULL,
+    tipo_falta TEXT NOT NULL,
+    monto NUMERIC NOT NULL DEFAULT 20000,
+    pagado BOOLEAN DEFAULT false NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- Habilitar acceso de lectura/escritura pública
 ALTER TABLE public.faltas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir todo a todos en faltas" ON public.faltas
     FOR ALL USING (true) WITH CHECK (true);
 
-
--- 3. Tabla de Usuarios (Soporte de Roles y Login)
+-- 6. Tabla de Usuarios
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username TEXT UNIQUE NOT NULL,                -- Nombre de usuario (veedor, caja, admin)
-    password_hash TEXT NOT NULL,                  -- Contraseña en texto plano para desarrollo
-    role TEXT NOT NULL CHECK (role IN ('veedor', 'caja', 'admin')), -- Rol asignado
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('veedor', 'caja', 'admin')),
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- Habilitar acceso de lectura/escritura pública
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir todo a todos en users" ON public.users
     FOR ALL USING (true) WITH CHECK (true);
 
-
 -- ==========================================
--- DATOS INICIALES DE PRUEBA (USUARIOS DE ACCESO)
+-- DATOS INICIALES
 -- ==========================================
-
 INSERT INTO public.users (username, password_hash, role)
 VALUES 
-    ('veedor', 'afemec123', 'veedor'),
-    ('caja', 'afemec123', 'caja'),
-    ('admin', 'afemec123', 'admin')
+    ('veedor', '64f4dc20b9216cc602771ee195f9486da0db3dd3b402be04af583d7eec23d940', 'veedor'),
+    ('caja', '64f4dc20b9216cc602771ee195f9486da0db3dd3b402be04af583d7eec23d940', 'caja'),
+    ('admin', '64f4dc20b9216cc602771ee195f9486da0db3dd3b402be04af583d7eec23d940', 'admin')
 ON CONFLICT (username) 
 DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role;
+
+-- Equipos iniciales
+INSERT INTO public.equipos (nombre) VALUES
+    ('Halcones'),
+    ('Dep. AFEMEC'),
+    ('Fénix FC'),
+    ('Titanes'),
+    ('Libertadores'),
+    ('Guaraní')
+ON CONFLICT (nombre) DO NOTHING;
