@@ -79,8 +79,9 @@ body {
 }
 
 #main-logo {
-    max-height: 40px;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .logo-fallback {
@@ -840,6 +841,132 @@ input:focus, select:focus {
     color: var(--text-muted);
     font-size: 0.9rem;
     font-weight: 500;
+}
+
+
+/* Promo Banner */
+#promo-banner {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    margin-bottom: 30px;
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(12, 35, 64, 0.9) 0%, rgba(245, 158, 11, 0.18) 100%);
+    color: white;
+}
+#promo-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1600&q=80') center/cover no-repeat;
+    opacity: 0.18;
+    filter: blur(2px);
+}
+.promo-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(12, 35, 64, 0.7) 0%, rgba(12, 35, 64, 0.92) 100%);
+}
+.promo-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 30px;
+    align-items: center;
+    padding: 40px 35px;
+}
+.promo-copy {
+    max-width: 650px;
+}
+.promo-label {
+    display: inline-flex;
+    padding: 8px 16px;
+    background: rgba(245, 158, 11, 0.2);
+    color: #ffe8a1;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+}
+#promo-title {
+    font-size: 2.6rem;
+    line-height: 1.05;
+    margin-bottom: 14px;
+    text-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+#promo-subtitle {
+    font-size: 1rem;
+    max-width: 550px;
+    color: rgba(255,255,255,0.84);
+    margin-bottom: 22px;
+}
+.promo-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    color: rgba(255,255,255,0.85);
+    font-weight: 600;
+}
+.promo-meta span {
+    background: rgba(255,255,255,0.08);
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.promo-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+    position: relative;
+}
+.promo-badge {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 12px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 1), rgba(249, 115, 22, 1));
+    color: #0c2340;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+}
+.promo-illustration {
+    width: 100%;
+    max-width: 320px;
+    height: 220px;
+    background: radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 35%),
+                radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.32), transparent 28%),
+                linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
+    border-radius: 24px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 20px 60px rgba(0,0,0,0.16);
+}
+@media (max-width: 900px) {
+    .promo-content {
+        grid-template-columns: 1fr;
+        padding: 28px 24px;
+    }
+    .promo-visual {
+        min-height: 180px;
+    }
+}
+@media (max-width: 640px) {
+    .promo-content {
+        padding: 22px 18px;
+    }
+    #promo-title {
+        font-size: 2rem;
+    }
 }
 
 /* Footer Styling */
