@@ -40,7 +40,7 @@
     <script>
         const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const log = document.getElementById('log');
 
@@ -63,12 +63,11 @@
             const lines = text.split('\n').filter(l => l.trim());
             addLog(`Archivo cargado: ${lines.length} líneas`);
 
-            // Skip group header (line 1) and column header (line 2)
             const dataLines = lines.slice(2);
             addLog(`Filas de datos: ${dataLines.length}`);
 
             let stats = { titulares: 0, conyuges: 0, hijos: 0, padres: 0, errores: 0, duplicados: 0 };
-            let titularesInsertados = new Set(); // track CI de titulares ya insertados
+            let titularesInsertados = new Set();
 
             for (let i = 0; i < dataLines.length; i++) {
                 const row = parseCSVLine(dataLines[i]);
@@ -77,7 +76,6 @@
                 const ciTitular = cleanNum(row[0]);
                 const nomTitular = row[1].trim();
                 const apeTitular = row[2].trim();
-                const conyugeCi = cleanNum(row[4]);
                 const conyugeNom = row[5].trim();
                 const conyugeApe = row[6].trim();
                 const padreNom = row[8].trim();
@@ -90,137 +88,59 @@
                 const hijoNom = row[17].trim();
                 const hijoApe = row[18].trim();
 
-                // Skip empty rows
                 if (!ciTitular && !nomTitular) continue;
 
                 try {
-                    // --- INSERTAR TITULAR (solo una vez por CI) ---
                     let titularId;
                     if (ciTitular && !titularesInsertados.has(ciTitular)) {
-                        const { data: existing } = await supabase
-                            .from('socios')
-                            .select('id')
-                            .eq('ci', ciTitular)
-                            .eq('tipo', 'titular')
-                            .maybeSingle();
+                        const { data: existing } = await supa.from('socios').select('id').eq('ci', ciTitular).eq('tipo', 'titular').maybeSingle();
 
                         if (existing) {
                             titularId = existing.id;
                             stats.duplicados++;
                         } else {
-                            const { data: newTitular, error: errT } = await supabase
-                                .from('socios')
-                                .insert({ ci: ciTitular, nombre: nomTitular, apellido: apeTitular, tipo: 'titular' })
-                                .select()
-                                .single();
-
+                            const { data: newTitular, error: errT } = await supa.from('socios').insert({ ci: ciTitular, nombre: nomTitular, apellido: apeTitular, tipo: 'titular' }).select().single();
                             if (errT) throw errT;
                             titularId = newTitular.id;
                             stats.titulares++;
+                            await supa.from('socios').update({ familia_id: titularId }).eq('id', titularId);
                         }
                         titularesInsertados.add(ciTitular);
-
-                        // Update familia_id to self
-                        await supabase.from('socios').update({ familia_id: titularId }).eq('id', titularId);
                     } else if (titularesInsertados.has(ciTitular)) {
-                        // Get existing titular ID for this CI
-                        const { data: t } = await supabase
-                            .from('socios')
-                            .select('id')
-                            .eq('ci', ciTitular)
-                            .eq('tipo', 'titular')
-                            .single();
+                        const { data: t } = await supa.from('socios').select('id').eq('ci', ciTitular).eq('tipo', 'titular').single();
                         titularId = t.id;
                     }
 
                     if (!titularId) continue;
 
-                    // --- INSERTAR CONYUGE ---
                     if (conyugeNom && conyugeNom !== '0') {
-                        const { data: existingC } = await supabase
-                            .from('socios')
-                            .select('id')
-                            .eq('nombre', conyugeNom)
-                            .eq('apellido', conyugeApe)
-                            .eq('tipo', 'conyuge')
-                            .eq('familia_id', titularId)
-                            .maybeSingle();
-
+                        const { data: existingC } = await supa.from('socios').select('id').eq('nombre', conyugeNom).eq('tipo', 'conyuge').eq('familia_id', titularId).maybeSingle();
                         if (!existingC) {
-                            await supabase.from('socios').insert({
-                                ci: conyugeCi || '',
-                                nombre: conyugeNom,
-                                apellido: conyugeApe || '',
-                                tipo: 'conyuge',
-                                familia_id: titularId
-                            });
+                            await supa.from('socios').insert({ nombre: conyugeNom, apellido: conyugeApe || '', tipo: 'conyuge', familia_id: titularId });
                             stats.conyuges++;
                         }
                     }
 
-                    // --- INSERTAR HIJO ---
                     if (hijoNom && hijoNom !== '0') {
-                        const { data: existingH } = await supabase
-                            .from('socios')
-                            .select('id')
-                            .eq('nombre', hijoNom)
-                            .eq('apellido', hijoApe)
-                            .eq('tipo', 'hijo')
-                            .eq('familia_id', titularId)
-                            .maybeSingle();
-
+                        const { data: existingH } = await supa.from('socios').select('id').eq('nombre', hijoNom).eq('tipo', 'hijo').eq('familia_id', titularId).maybeSingle();
                         if (!existingH) {
-                            await supabase.from('socios').insert({
-                                ci: hijoCi || '',
-                                nombre: hijoNom,
-                                apellido: hijoApe || '',
-                                tipo: 'hijo',
-                                familia_id: titularId
-                            });
+                            await supa.from('socios').insert({ ci: hijoCi || '', nombre: hijoNom, apellido: hijoApe || '', tipo: 'hijo', familia_id: titularId });
                             stats.hijos++;
                         }
                     }
 
-                    // --- INSERTAR PADRE ---
                     if (padreNom && padreNom !== '0') {
-                        const { data: existingP } = await supabase
-                            .from('padres_titular')
-                            .select('id')
-                            .eq('titular_id', titularId)
-                            .eq('nombre', padreNom)
-                            .eq('tipo', 'padre')
-                            .maybeSingle();
-
+                        const { data: existingP } = await supa.from('padres_titular').select('id').eq('titular_id', titularId).eq('nombre', padreNom).eq('tipo', 'padre').maybeSingle();
                         if (!existingP) {
-                            await supabase.from('padres_titular').insert({
-                                titular_id: titularId,
-                                nombre: padreNom,
-                                apellido: padreApe || '',
-                                ci: padreCi || '',
-                                tipo: 'padre'
-                            });
+                            await supa.from('padres_titular').insert({ titular_id: titularId, nombre: padreNom, apellido: padreApe || '', ci: padreCi || '', tipo: 'padre' });
                             stats.padres++;
                         }
                     }
 
-                    // --- INSERTAR MADRE ---
                     if (madreNom && madreNom !== '0') {
-                        const { data: existingM } = await supabase
-                            .from('padres_titular')
-                            .select('id')
-                            .eq('titular_id', titularId)
-                            .eq('nombre', madreNom)
-                            .eq('tipo', 'madre')
-                            .maybeSingle();
-
+                        const { data: existingM } = await supa.from('padres_titular').select('id').eq('titular_id', titularId).eq('nombre', madreNom).eq('tipo', 'madre').maybeSingle();
                         if (!existingM) {
-                            await supabase.from('padres_titular').insert({
-                                titular_id: titularId,
-                                nombre: madreNom,
-                                apellido: madreApe || '',
-                                ci: madreCi || '',
-                                tipo: 'madre'
-                            });
+                            await supa.from('padres_titular').insert({ titular_id: titularId, nombre: madreNom, apellido: madreApe || '', ci: madreCi || '', tipo: 'madre' });
                             stats.padres++;
                         }
                     }
@@ -251,14 +171,9 @@
             let inQuotes = false;
             for (let i = 0; i < line.length; i++) {
                 const ch = line[i];
-                if (ch === '"') {
-                    inQuotes = !inQuotes;
-                } else if (ch === ',' && !inQuotes) {
-                    result.push(current);
-                    current = '';
-                } else {
-                    current += ch;
-                }
+                if (ch === '"') { inQuotes = !inQuotes; }
+                else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+                else { current += ch; }
             }
             result.push(current);
             return result;
