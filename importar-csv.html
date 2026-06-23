@@ -43,139 +43,107 @@
         const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const log = document.getElementById('log');
-
-        function addLog(msg, type = '') {
-            log.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-            log.scrollTop = log.scrollHeight;
-        }
+        function addLog(msg) { log.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`; log.scrollTop = log.scrollHeight; }
 
         async function importar() {
             const fileInput = document.getElementById('csvFile');
             const btn = document.getElementById('btnImport');
-
-            if (!fileInput.files.length) {
-                addLog('Seleccioná un archivo CSV primero', 'err');
-                return;
-            }
-
+            if (!fileInput.files.length) { addLog('Seleccioná un archivo CSV primero'); return; }
             btn.disabled = true;
+
             const text = await fileInput.files[0].text();
             const lines = text.split('\n').filter(l => l.trim());
-            addLog(`Archivo cargado: ${lines.length} líneas`);
-
             const dataLines = lines.slice(2);
             addLog(`Filas de datos: ${dataLines.length}`);
 
-            let stats = { titulares: 0, conyuges: 0, hijos: 0, padres: 0, errores: 0, duplicados: 0 };
-            let titularesInsertados = new Set();
+            // ---- PARSEAR ----
+            const titulares = new Map();
+            const conyuges = [], hijos = [], padres = [];
 
-            for (let i = 0; i < dataLines.length; i++) {
-                const row = parseCSVLine(dataLines[i]);
-                if (row.length < 19) continue;
+            for (const line of dataLines) {
+                const r = parseCSVLine(line);
+                if (r.length < 19) continue;
+                const ci = cleanNum(r[0]), nom = r[1].trim(), ape = r[2].trim();
+                if (!ci && !nom) continue;
+                if (!titulares.has(ci)) titulares.set(ci, { ci, nombre: nom, apellido: ape });
+                const cNom = r[5].trim();
+                if (cNom && cNom !== '0') conyuges.push({ ci_titular: ci, nombre: cNom, apellido: r[6].trim() || '' });
+                const hNom = r[17].trim();
+                if (hNom && hNom !== '0') hijos.push({ ci_titular: ci, ci: cleanNum(r[16]), nombre: hNom, apellido: r[18].trim() || '' });
+                const pNom = r[8].trim();
+                if (pNom && pNom !== '0') padres.push({ ci_titular: ci, nombre: pNom, apellido: r[9].trim() || '', ci: cleanNum(r[10]), tipo: 'padre' });
+                const mNom = r[12].trim();
+                if (mNom && mNom !== '0') padres.push({ ci_titular: ci, nombre: mNom, apellido: r[13].trim() || '', ci: cleanNum(r[14]), tipo: 'madre' });
+            }
 
-                const ciTitular = cleanNum(row[0]);
-                const nomTitular = row[1].trim();
-                const apeTitular = row[2].trim();
-                const conyugeNom = row[5].trim();
-                const conyugeApe = row[6].trim();
-                const padreNom = row[8].trim();
-                const padreApe = row[9].trim();
-                const padreCi = cleanNum(row[10]);
-                const madreNom = row[12].trim();
-                const madreApe = row[13].trim();
-                const madreCi = cleanNum(row[14]);
-                const hijoCi = cleanNum(row[16]);
-                const hijoNom = row[17].trim();
-                const hijoApe = row[18].trim();
+            addLog(`Parseo: ${titulares.size} titulares, ${conyuges.length} cónyuges, ${hijos.length} hijos, ${padres.length} padres`);
 
-                if (!ciTitular && !nomTitular) continue;
+            // ---- INSERTAR TITULARES ----
+            addLog('Insertando titulares...');
+            const arrT = Array.from(titulares.values());
+            const ciToId = new Map();
+            const B = 200;
+            for (let i = 0; i < arrT.length; i += B) {
+                const batch = arrT.slice(i, i + B).map(t => ({ ci: t.ci, nombre: t.nombre, apellido: t.apellido, tipo: 'titular' }));
+                const { data, error } = await supa.from('socios').insert(batch).select('id, ci');
+                if (error) { addLog(`Error lote ${i}: ${error.message}`); continue; }
+                if (data) data.forEach(d => ciToId.set(d.ci, d.id));
+                addLog(`  Titulares: ${Math.min(i + B, arrT.length)}/${arrT.length}`);
+            }
 
-                try {
-                    let titularId;
-                    if (ciTitular && !titularesInsertados.has(ciTitular)) {
-                        const { data: existing } = await supa.from('socios').select('id').eq('ci', ciTitular).eq('tipo', 'titular').maybeSingle();
+            // ---- FAMILIA_ID = id para titulares ----
+            addLog('Asignando familia_id...');
+            for (const [ci, id] of ciToId) {
+                await supa.from('socios').update({ familia_id: id }).eq('id', id);
+            }
+            addLog(`  ${ciToId.size} titulares actualizados`);
 
-                        if (existing) {
-                            titularId = existing.id;
-                            stats.duplicados++;
-                        } else {
-                            const { data: newTitular, error: errT } = await supa.from('socios').insert({ ci: ciTitular, nombre: nomTitular, apellido: apeTitular, tipo: 'titular' }).select().single();
-                            if (errT) throw errT;
-                            titularId = newTitular.id;
-                            stats.titulares++;
-                            await supa.from('socios').update({ familia_id: titularId }).eq('id', titularId);
-                        }
-                        titularesInsertados.add(ciTitular);
-                    } else if (titularesInsertados.has(ciTitular)) {
-                        const { data: t } = await supa.from('socios').select('id').eq('ci', ciTitular).eq('tipo', 'titular').single();
-                        titularId = t.id;
+            // ---- INSERTAR FAMILIARES (usando mapa ci->id, sin SELECTs) ----
+            async function insertarLote(lista, tabla, mapper) {
+                if (!lista.length) return;
+                for (let i = 0; i < lista.length; i += B) {
+                    const batch = [];
+                    for (const item of lista.slice(i, i + B)) {
+                        const tid = ciToId.get(item.ci_titular);
+                        if (tid) batch.push(mapper(item, tid));
                     }
-
-                    if (!titularId) continue;
-
-                    if (conyugeNom && conyugeNom !== '0') {
-                        const { data: existingC } = await supa.from('socios').select('id').eq('nombre', conyugeNom).eq('tipo', 'conyuge').eq('familia_id', titularId).maybeSingle();
-                        if (!existingC) {
-                            await supa.from('socios').insert({ nombre: conyugeNom, apellido: conyugeApe || '', tipo: 'conyuge', familia_id: titularId });
-                            stats.conyuges++;
-                        }
+                    if (batch.length) {
+                        const { error } = await supa.from(tabla).insert(batch);
+                        if (error) addLog(`Error ${tabla}: ${error.message}`);
                     }
-
-                    if (hijoNom && hijoNom !== '0') {
-                        const { data: existingH } = await supa.from('socios').select('id').eq('nombre', hijoNom).eq('tipo', 'hijo').eq('familia_id', titularId).maybeSingle();
-                        if (!existingH) {
-                            await supa.from('socios').insert({ ci: hijoCi || '', nombre: hijoNom, apellido: hijoApe || '', tipo: 'hijo', familia_id: titularId });
-                            stats.hijos++;
-                        }
-                    }
-
-                    if (padreNom && padreNom !== '0') {
-                        const { data: existingP } = await supa.from('padres_titular').select('id').eq('titular_id', titularId).eq('nombre', padreNom).eq('tipo', 'padre').maybeSingle();
-                        if (!existingP) {
-                            await supa.from('padres_titular').insert({ titular_id: titularId, nombre: padreNom, apellido: padreApe || '', ci: padreCi || '', tipo: 'padre' });
-                            stats.padres++;
-                        }
-                    }
-
-                    if (madreNom && madreNom !== '0') {
-                        const { data: existingM } = await supa.from('padres_titular').select('id').eq('titular_id', titularId).eq('nombre', madreNom).eq('tipo', 'madre').maybeSingle();
-                        if (!existingM) {
-                            await supa.from('padres_titular').insert({ titular_id: titularId, nombre: madreNom, apellido: madreApe || '', ci: madreCi || '', tipo: 'madre' });
-                            stats.padres++;
-                        }
-                    }
-
-                    if ((i + 1) % 100 === 0) addLog(`Procesados ${i + 1}/${dataLines.length}...`);
-
-                } catch (e) {
-                    stats.errores++;
-                    addLog(`Error fila ${i + 3}: ${e.message}`, 'err');
                 }
             }
 
-            addLog('--- IMPORTACIÓN COMPLETADA ---', 'ok');
-            addLog(`Titulares: ${stats.titulares} | Cónyuges: ${stats.conyuges} | Hijos: ${stats.hijos} | Padres: ${stats.padres} | Duplicados: ${stats.duplicados} | Errores: ${stats.errores}`);
+            addLog('Insertando cónyuges...');
+            await insertarLote(conyuges, 'socios', (c, tid) => ({ nombre: c.nombre, apellido: c.apellido, tipo: 'conyuge', familia_id: tid }));
+            addLog(`  ${conyuges.length} cónyuges`);
 
+            addLog('Insertando hijos...');
+            await insertarLote(hijos, 'socios', (h, tid) => ({ ci: h.ci, nombre: h.nombre, apellido: h.apellido, tipo: 'hijo', familia_id: tid }));
+            addLog(`  ${hijos.length} hijos`);
+
+            addLog('Insertando padres...');
+            await insertarLote(padres, 'padres_titular', (p, tid) => ({ titular_id: tid, nombre: p.nombre, apellido: p.apellido, ci: p.ci, tipo: p.tipo }));
+            addLog(`  ${padres.length} padres`);
+
+            addLog('--- IMPORTACIÓN COMPLETADA ---');
             document.getElementById('stats').style.display = 'grid';
-            document.getElementById('s-titulares').textContent = stats.titulares;
-            document.getElementById('s-conyuges').textContent = stats.conyuges;
-            document.getElementById('s-hijos').textContent = stats.hijos;
-            document.getElementById('s-padres').textContent = stats.padres;
-
+            document.getElementById('s-titulares').textContent = titulares.size;
+            document.getElementById('s-conyuges').textContent = conyuges.length;
+            document.getElementById('s-hijos').textContent = hijos.length;
+            document.getElementById('s-padres').textContent = padres.length;
             btn.disabled = false;
         }
 
         function parseCSVLine(line) {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
+            const result = []; let cur = ''; let inQ = false;
             for (let i = 0; i < line.length; i++) {
                 const ch = line[i];
-                if (ch === '"') { inQuotes = !inQuotes; }
-                else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
-                else { current += ch; }
+                if (ch === '"') inQ = !inQ;
+                else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
+                else cur += ch;
             }
-            result.push(current);
+            result.push(cur);
             return result;
         }
 
