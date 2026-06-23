@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS public.socios (
 );
 
 ALTER TABLE public.socios ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en socios" ON public.socios
+DROP POLICY IF EXISTS "Permitir todo a todos en socios" ON public.socios;
+CREATE POLICY "Permitir todo a todos en socios" ON public.socios
     FOR ALL USING (true) WITH CHECK (true);
 
 -- 2. Tabla de Padres del Titular
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS public.padres_titular (
 );
 
 ALTER TABLE public.padres_titular ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en padres_titular" ON public.padres_titular
+DROP POLICY IF EXISTS "Permitir todo a todos en padres_titular" ON public.padres_titular;
+CREATE POLICY "Permitir todo a todos en padres_titular" ON public.padres_titular
     FOR ALL USING (true) WITH CHECK (true);
 
 -- 3. Tabla de Equipos
@@ -43,7 +45,8 @@ CREATE TABLE IF NOT EXISTS public.equipos (
 );
 
 ALTER TABLE public.equipos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en equipos" ON public.equipos
+DROP POLICY IF EXISTS "Permitir todo a todos en equipos" ON public.equipos;
+CREATE POLICY "Permitir todo a todos en equipos" ON public.equipos
     FOR ALL USING (true) WITH CHECK (true);
 
 -- 4. Tabla de Inscripción de Atletas (vincula socio + equipo)
@@ -56,7 +59,8 @@ CREATE TABLE IF NOT EXISTS public.atletas (
 );
 
 ALTER TABLE public.atletas ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en atletas" ON public.atletas
+DROP POLICY IF EXISTS "Permitir todo a todos en atletas" ON public.atletas;
+CREATE POLICY "Permitir todo a todos en atletas" ON public.atletas
     FOR ALL USING (true) WITH CHECK (true);
 
 -- 5. Tabla de Faltas (Multas Disciplinarias)
@@ -71,7 +75,8 @@ CREATE TABLE IF NOT EXISTS public.faltas (
 );
 
 ALTER TABLE public.faltas ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en faltas" ON public.faltas
+DROP POLICY IF EXISTS "Permitir todo a todos en faltas" ON public.faltas;
+CREATE POLICY "Permitir todo a todos en faltas" ON public.faltas
     FOR ALL USING (true) WITH CHECK (true);
 
 -- 6. Tabla de Usuarios
@@ -84,7 +89,8 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Permitir todo a todos en users" ON public.users
+DROP POLICY IF EXISTS "Permitir todo a todos en users" ON public.users;
+CREATE POLICY "Permitir todo a todos en users" ON public.users
     FOR ALL USING (true) WITH CHECK (true);
 
 -- ==========================================
