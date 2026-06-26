@@ -1127,26 +1127,77 @@ footer.app-footer p {
     font-size: 13px;
 }
 
-/* ---------- RESPONSIVE ---------- */
+/* ---------- RESPONSIVE / MOBILE (ANDROID) ---------- */
+
+/* Small phones */
+@media (max-width: 480px) {
+    .section-card { padding: 14px; }
+    .section-header-icon h2 { font-size: 1.3rem; }
+    .section-header-icon p { font-size: 0.8rem; }
+    .icon-header-accent { width: 44px; height: 44px; padding: 10px; }
+    .kpi-card { padding: 14px 16px; gap: 12px; }
+    .kpi-value { font-size: 1.4rem; }
+    .kpi-icon { width: 40px; height: 40px; }
+    .kpi-icon i { width: 22px; height: 22px; }
+    .search-container { flex-direction: column; gap: 8px; }
+    .search-result-card { padding: 16px; }
+    .player-info-card { flex-direction: column; text-align: center; }
+    .admin-tabs button { padding: 8px 10px; font-size: 11px; }
+    .table-title { font-size: 1rem; }
+    .tabla-deportiva { font-size: 0.75rem; }
+    .tabla-deportiva th, .tabla-deportiva td { padding: 8px 6px; }
+    .btn-primary, .btn-secondary, .btn-danger, .btn-success, .btn-search { padding: 12px 18px; font-size: 0.85rem; }
+    .form-grid { grid-template-columns: 1fr; }
+    .admin-grid { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; }
+    .card-select-grid { grid-template-columns: 1fr 1fr; }
+    .brand-text h1 { font-size: 1.1rem; }
+    .badge-status { font-size: 0.6rem; }
+    .logo-wrapper { width: 38px; height: 38px; }
+    .fixture-timeline { gap: 14px; }
+    #veedor-timer-bar { gap: 4px; }
+    #veedor-timer-bar button { font-size: 11px !important; padding: 6px 10px !important; }
+    #veedor-score-display { padding: 2px 8px; }
+    #veedor-score-display span { font-size: 20px !important; }
+    #veedor-timer-display { font-size: 22px !important; }
+    .vs-score { font-size: 1.5rem !important; min-width: 50px !important; }
+    .promo-content { padding: 16px; }
+    #promo-title { font-size: 1.5rem; }
+    #promo-subtitle { font-size: 0.85rem; }
+}
+
+/* Tablets & small screens */
+@media (max-width: 768px) and (min-width: 481px) {
+    .section-card { padding: 20px; }
+    .section-header-icon h2 { font-size: 1.5rem; }
+    .kpi-value { font-size: 1.6rem; }
+    .card-select-grid { grid-template-columns: 1fr 1fr 1fr; }
+    .tabla-deportiva { font-size: 0.8rem; }
+    .tabla-deportiva th, .tabla-deportiva td { padding: 10px 8px; }
+}
+
+/* Shared mobile rules (both <768) */
 @media (max-width: 768px) {
     .header-container {
         flex-direction: column;
-        gap: 15px;
-        padding: 1rem;
+        gap: 8px;
+        padding: 0.6rem 0.8rem;
     }
 
     .main-nav {
         width: 100%;
         overflow-x: auto;
-        padding-bottom: 5px;
+        padding-bottom: 4px;
         justify-content: flex-start;
         -webkit-overflow-scrolling: touch;
+        gap: 4px;
     }
 
     .nav-btn {
-        padding: 8px 12px;
-        font-size: 0.85rem;
+        padding: 8px 10px;
+        font-size: 0.75rem;
         flex-shrink: 0;
+        min-height: 38px;
     }
 
     .nav-btn span {
@@ -1154,34 +1205,144 @@ footer.app-footer p {
     }
 
     .nav-btn i {
+        width: 16px;
+        height: 16px;
         margin: 0;
     }
 
-    .app-main {
-        margin: 20px auto;
+    .nav-separator {
+        height: 18px;
+        margin: 0 4px;
     }
 
-    .section-card {
-        padding: 24px;
+    .app-main {
+        margin: 14px auto;
+        padding: 0 10px;
+    }
+
+    .app-header {
+        margin: 6px 8px 0 8px;
+        top: 6px;
+    }
+
+    .search-container {
+        max-width: 100%;
+    }
+
+    .premium-form {
+        max-width: 100%;
     }
 
     .partido-card {
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
         text-align: center;
-        padding: 20px;
+        padding: 14px;
     }
 
     .partido-versus {
         flex-direction: column;
-        gap: 5px;
+        gap: 4px;
     }
 
-    .app-header {
-        margin: 5px 10px 0 10px;
-    }
+    .partido-hora { font-size: 0.85rem; }
+    .partido-versus .team { font-size: 0.9rem; }
+    .partido-cancha { font-size: 0.8rem; }
 
     footer.app-footer {
-        margin: 40px 10px 10px 10px;
+        margin: 30px 8px 8px 8px;
+        padding: 24px 14px;
+        font-size: 0.75rem;
     }
+
+    /* Tables horizontal scroll fix */
+    .table-container {
+        margin: 0 -4px;
+        border-radius: var(--radius-sm);
+    }
+
+    /* Dual column → single for Veedor */
+    #veedor-plantel-dual {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Admin tabs scrollable */
+    .admin-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch;
+        gap: 2px;
+    }
+    .admin-tabs button {
+        flex-shrink: 0;
+        white-space: nowrap;
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    /* KPI cards stack */
+    .kpi-card {
+        margin-bottom: 20px;
+    }
+
+    /* Form inputs touch-friendly */
+    input, select, .form-input {
+        font-size: 16px !important; /* prevents iOS zoom */
+        padding: 10px 12px 10px 36px;
+    }
+    .form-input:not(.input-icon-wrapper input) {
+        padding: 10px 12px;
+    }
+
+    /* Buttons touch-friendly */
+    .btn-action {
+        padding: 10px 14px;
+        min-height: 44px;
+    }
+    .btn-sm {
+        padding: 8px 14px;
+        min-height: 44px;
+        font-size: 13px;
+    }
+
+    /* Hide promo section on mobile */
+    #promo-banner { display: none; }
+
+    /* Fixture timeline: card per match */
+    .fixture-timeline {
+        gap: 12px;
+    }
+
+    .filtros-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .form-group-inline {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .form-group-inline select {
+        width: 100%;
+    }
+}
+
+/* Landscape phones */
+@media (max-height: 480px) and (orientation: landscape) {
+    .app-header { top: 2px; margin: 4px 8px 0; }
+    .header-container { padding: 0.3rem 0.8rem; flex-direction: row; }
+    .main-nav { width: auto; overflow-x: auto; }
+    .section-card { padding: 12px; }
+    .section-header-icon { margin-bottom: 14px; }
+    .section-header-icon h2 { font-size: 1.1rem; }
+    .icon-header-accent { width: 36px; height: 36px; padding: 8px; }
+    .kpi-card { padding: 10px 14px; margin-bottom: 14px; }
+    #veedor-plantel-dual { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* Make input/select easier to read on all mobile */
+@media (max-width: 480px) {
+    label { font-size: 0.75rem; }
+    .section-header-icon { margin-bottom: 18px; }
+    .section-header-icon h2 { margin-bottom: 4px; }
 }
