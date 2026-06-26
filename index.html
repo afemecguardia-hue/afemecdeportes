@@ -100,6 +100,9 @@
                     <i data-lucide="bar-chart-3"></i><span>Estadísticas</span>
                 </button>
                 <div class="nav-separator"></div>
+                <button id="btn-orientacion" onclick="toggleOrientacion()" class="nav-btn" style="display:none;">
+                    <i data-lucide="maximize"></i><span>Modo Tableta</span>
+                </button>
                 <button id="nav-login" onclick="showSection('login')" class="nav-btn btn-login">
                     <i data-lucide="log-in"></i><span>Ingresar</span>
                 </button>
@@ -783,6 +786,42 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
+
+    <!-- Orientation Toggle -->
+    <script>
+    function toggleOrientacion() {
+        if (!screen.orientation) return;
+        var btn = document.getElementById('btn-orientacion');
+        if (screen.orientation.type && screen.orientation.type.startsWith('portrait')) {
+            screen.orientation.lock('landscape').then(function() {
+                if (btn) btn.innerHTML = '<i data-lucide="minimize"></i><span>Modo Retrato</span>';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }).catch(function(e) { console.log('Ori lock:', e); });
+        } else {
+            screen.orientation.unlock();
+            if (btn) btn.innerHTML = '<i data-lucide="maximize"></i><span>Modo Tableta</span>';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+    }
+
+    function actualizarBotonOrientacion() {
+        var btn = document.getElementById('btn-orientacion');
+        if (!btn) return;
+        var enApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        if (enApp) {
+            btn.style.display = '';
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', actualizarBotonOrientacion);
+    window.addEventListener('appinstalled', actualizarBotonOrientacion);
+    // Re-check on display-mode change
+    if (window.matchMedia) {
+        window.matchMedia('(display-mode: standalone)').addEventListener('change', actualizarBotonOrientacion);
+    }
+    </script>
 
     <!-- PWA Install Logic -->
     <script>
