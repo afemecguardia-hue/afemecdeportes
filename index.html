@@ -794,7 +794,6 @@
         var bannerTitle = document.getElementById('pwa-banner-title');
         var bannerText = document.getElementById('pwa-banner-text');
 
-        var LS_INSTALADA = 'afemec_pwa_instalada';
         var SS_CERRADA = 'afemec_banner_cerrada';
 
         function isMobile() {
@@ -807,10 +806,6 @@
                    window.navigator.standalone === true;
         }
 
-        function isInstalled() {
-            return localStorage.getItem(LS_INSTALADA) === 'true' || isStandalone();
-        }
-
         function mostrarInstalar() {
             if (!banner) return;
             bannerTitle.textContent = 'AFEMEC Deportes';
@@ -819,43 +814,15 @@
             banner.style.display = 'block';
         }
 
-        function mostrarInfoInstalada() {
-            if (!banner) return;
-            bannerTitle.textContent = '✅ AFEMEC Deportes';
-            bannerText.textContent = 'App instalada. Abrila desde la pantalla de inicio de tu dispositivo.';
-            btnInstall.style.display = 'none';
-            banner.style.display = 'block';
-        }
-
         function ocultarBanner() {
-            if (banner) { banner.style.display = 'none'; }
+            if (banner) banner.style.display = 'none';
         }
-
-        // --- Lógica principal ---
-        function initPwa() {
-            // Si está en modo standalone (ya en la app), nunca mostrar banner
-            if (isStandalone()) { return; }
-
-            // Si ya está instalada (flag localStorage), mostrar "Abrir en App"
-            if (isInstalled()) {
-                mostrarInfoInstalada();
-                return;
-            }
-
-            // Si no es móvil, no mostrar nada
-            if (!isMobile()) { return; }
-
-            // Si ya cerró el banner en esta sesión, no mostrar
-            if (sessionStorage.getItem(SS_CERRADA) === 'true') { return; }
-        }
-
-        // --- Eventos ---
 
         // beforeinstallprompt (Chrome Android)
         window.addEventListener('beforeinstallprompt', function(e) {
             e.preventDefault();
             deferredPrompt = e;
-            if (isMobile() && !isStandalone() && !isInstalled() &&
+            if (isMobile() && !isStandalone() &&
                 sessionStorage.getItem(SS_CERRADA) !== 'true') {
                 mostrarInstalar();
             }
@@ -868,7 +835,6 @@
                     deferredPrompt.prompt();
                     deferredPrompt.userChoice.then(function(choice) {
                         if (choice.outcome === 'accepted') {
-                            localStorage.setItem(LS_INSTALADA, 'true');
                             ocultarBanner();
                         }
                         deferredPrompt = null;
@@ -889,42 +855,27 @@
 
         // Evento appinstalled
         window.addEventListener('appinstalled', function() {
-            localStorage.setItem(LS_INSTALADA, 'true');
             ocultarBanner();
             deferredPrompt = null;
         });
 
-        // Inicializar al cargar
-        initPwa();
+        // En la app standalone nunca mostrar
+        if (isStandalone()) { /* no hacer nada */ }
 
-        // Fallback: si after 4s no se mostró y es mobile, mostrar instalación
-        setTimeout(function() {
-            if (isMobile() && !isStandalone() && !isInstalled() &&
-                banner && banner.style.display !== 'block' &&
-                sessionStorage.getItem(SS_CERRADA) !== 'true') {
-                mostrarInstalar();
-            }
-        }, 4000);
-
-        // Cambio de orientación: re-evaluar
-        var resizeTimer;
-        window.addEventListener('resize', function() {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function() {
-                if (isStandalone()) { ocultarBanner(); return; }
-                if (isInstalled() && isMobile()) { mostrarInfoInstalada(); return; }
-                if (isMobile() && !isInstalled() && deferredPrompt &&
+        // Fallback a los 4s: mostrar banner de instalación en mobile
+        if (!isStandalone()) {
+            setTimeout(function() {
+                if (isMobile() && banner && banner.style.display !== 'block' &&
                     sessionStorage.getItem(SS_CERRADA) !== 'true') {
                     mostrarInstalar();
                 }
-            }, 500);
-        });
+            }, 4000);
+        }
 
-        // Register Service Worker (relative path para compatibilidad)
+        // Register Service Worker (ruta relativa)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                var swPath = 'sw.js';
-                navigator.serviceWorker.register(swPath).then(function(reg) {
+                navigator.serviceWorker.register('sw.js').then(function(reg) {
                     console.log('SW registered:', reg.scope);
                 }).catch(function(err) {
                     console.log('SW error:', err);
