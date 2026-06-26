@@ -1328,10 +1328,11 @@ footer.app-footer p {
 }
 
 /* Landscape phones */
-/* Botón orientación (solo en app standalone) */
-#btn-orientacion { display:none; }
-#btn-orientacion i { transition: transform 0.3s ease; }
-#btn-orientacion[data-orientacion="landscape"] i { transform: rotate(90deg); }
+/* Botón orientación flotante (solo app standalone) */
+#btn-orientacion { transition: opacity 0.3s ease, transform 0.3s ease; opacity:0.9; }
+#btn-orientacion:hover { opacity:1; transform:scale(1.1); }
+#btn-orientacion:active { transform:scale(0.95); }
+#ico-orientacion { pointer-events:none; }
 
 /* Landscape: phones compactos */
 @media (max-height: 500px) and (orientation: landscape) {

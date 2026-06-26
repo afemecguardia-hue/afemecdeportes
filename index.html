@@ -100,9 +100,6 @@
                     <i data-lucide="bar-chart-3"></i><span>Estadísticas</span>
                 </button>
                 <div class="nav-separator"></div>
-                <button id="btn-orientacion" onclick="toggleOrientacion()" class="nav-btn" style="display:none;">
-                    <i data-lucide="maximize"></i><span>Modo Tableta</span>
-                </button>
                 <button id="nav-login" onclick="showSection('login')" class="nav-btn btn-login">
                     <i data-lucide="log-in"></i><span>Ingresar</span>
                 </button>
@@ -112,6 +109,11 @@
             </nav>
         </div>
     </header>
+
+    <!-- Floating orientation toggle (app standalone only) -->
+    <button id="btn-orientacion" onclick="toggleOrientacion()" style="display:none;position:fixed;top:12px;right:12px;z-index:9998;background:rgba(185,28,28,0.85);backdrop-filter:blur(8px);border:1px solid var(--accent-color);color:white;width:44px;height:44px;border-radius:50%;cursor:pointer;font-size:20px;box-shadow:0 2px 12px rgba(0,0,0,0.4);align-items:center;justify-content:center;" title="Modo Tableta">
+        <i data-lucide="maximize" id="ico-orientacion"></i>
+    </button>
 
     <main class="app-main">
 
@@ -791,15 +793,18 @@
     <script>
     function toggleOrientacion() {
         if (!screen.orientation) return;
+        var ico = document.getElementById('ico-orientacion');
         var btn = document.getElementById('btn-orientacion');
         if (screen.orientation.type && screen.orientation.type.startsWith('portrait')) {
             screen.orientation.lock('landscape').then(function() {
-                if (btn) btn.innerHTML = '<i data-lucide="minimize"></i><span>Modo Retrato</span>';
+                if (ico) { ico.setAttribute('data-lucide', 'minimize'); }
+                if (btn) { btn.title = 'Modo Retrato'; }
                 if (typeof lucide !== 'undefined') lucide.createIcons();
-            }).catch(function(e) { console.log('Ori lock:', e); });
+            }).catch(function(e) { console.log('Ori lock error:', e); });
         } else {
             screen.orientation.unlock();
-            if (btn) btn.innerHTML = '<i data-lucide="maximize"></i><span>Modo Tableta</span>';
+            if (ico) { ico.setAttribute('data-lucide', 'maximize'); }
+            if (btn) { btn.title = 'Modo Tableta'; }
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
     }
@@ -808,16 +813,11 @@
         var btn = document.getElementById('btn-orientacion');
         if (!btn) return;
         var enApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-        if (enApp) {
-            btn.style.display = '';
-        } else {
-            btn.style.display = 'none';
-        }
+        btn.style.display = enApp ? 'flex' : 'none';
     }
 
     document.addEventListener('DOMContentLoaded', actualizarBotonOrientacion);
     window.addEventListener('appinstalled', actualizarBotonOrientacion);
-    // Re-check on display-mode change
     if (window.matchMedia) {
         window.matchMedia('(display-mode: standalone)').addEventListener('change', actualizarBotonOrientacion);
     }
