@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#1a0a0a">
+    <meta name="theme-color" content="#b91c1c">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AFEMEC">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="logo2.png">
     <title>AFEMEC - Sistema de Torneo de Alto Rendimiento</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -43,6 +48,28 @@
     </style>
 </head>
 <body>
+    <!-- PWA Install Banner -->
+    <div id="pwa-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:linear-gradient(145deg,rgba(185,28,28,0.97),rgba(120,20,20,0.98));backdrop-filter:blur(20px);border-top:2px solid var(--accent-color);padding:14px 18px;box-shadow:0 -8px 40px rgba(185,28,28,0.5);animation:slideUp 0.5s ease-out;">
+        <div style="display:flex;align-items:center;gap:12px;max-width:500px;margin:0 auto;">
+            <img src="logo2.png" alt="AFEMEC" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--accent-color);box-shadow:0 0 20px var(--accent-glow);flex-shrink:0;">
+            <div style="flex:1;min-width:0;">
+                <strong style="color:white;font-size:15px;display:block;">AFEMEC Deportes</strong>
+                <span style="color:var(--text-muted);font-size:12px;display:block;">Instalá la app para una experiencia más rápida</span>
+            </div>
+            <button id="btn-instalar-pwa" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#7a1a1a;border:none;padding:12px 22px;border-radius:50px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 0 30px var(--accent-glow),0 4px 16px rgba(0,0,0,0.3);animation:pulseGlow 1.8s ease-in-out infinite;white-space:nowrap;letter-spacing:0.5px;">⭐ Instalar App</button>
+            <button id="btn-cerrar-install" style="background:rgba(255,255,255,0.1);color:white;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+    </div>
+    <style>
+        @keyframes slideUp { from { transform:translateY(100%);opacity:0; } to { transform:translateY(0);opacity:1; } }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow:0 0 20px rgba(245,158,11,0.4),0 4px 16px rgba(0,0,0,0.3); transform: scale(1); }
+            50% { box-shadow:0 0 40px rgba(245,158,11,0.8),0 0 60px rgba(245,158,11,0.3),0 4px 16px rgba(0,0,0,0.3); transform: scale(1.05); }
+        }
+        #btn-instalar-pwa:active { transform:scale(0.95); }
+    </style>
+    <!-- End PWA Install Banner -->
+
     <header class="app-header">
         <div class="header-container">
             <div class="brand">
@@ -756,5 +783,111 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
+
+    <!-- PWA Install Logic -->
+    <script>
+    (function() {
+        var deferredPrompt = null;
+        var banner = document.getElementById('pwa-install-banner');
+        var btnInstall = document.getElementById('btn-instalar-pwa');
+        var btnClose = document.getElementById('btn-cerrar-install');
+
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                   ('maxTouchPoints' in navigator && navigator.maxTouchPoints > 0 && window.innerWidth < 900);
+        }
+
+        function isStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;
+        }
+
+        function mostrarBanner() {
+            if (!banner) return;
+            if (isStandalone()) { banner.style.display = 'none'; return; }
+            banner.style.display = 'block';
+        }
+
+        function ocultarBanner() {
+            if (banner) banner.style.display = 'none';
+        }
+
+        // Escuchar beforeinstallprompt (Chrome Android)
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (isMobile() && !isStandalone()) mostrarBanner();
+        });
+
+        // Botón instalar
+        if (btnInstall) {
+            btnInstall.addEventListener('click', function() {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then(function(choice) {
+                        if (choice.outcome === 'accepted') {
+                            ocultarBanner();
+                        }
+                        deferredPrompt = null;
+                    });
+                } else {
+                    // Fallback: abrir instrucciones o mostrar modal
+                    ocultarBanner();
+                }
+            });
+        }
+
+        // Botón cerrar
+        if (btnClose) {
+            btnClose.addEventListener('click', ocultarBanner);
+        }
+
+        // Detectar si ya está instalado (por display-mode)
+        window.addEventListener('appinstalled', function() {
+            ocultarBanner();
+            deferredPrompt = null;
+        });
+
+        // Mobile detection on load (for non-Chrome or after dismiss)
+        if (isMobile() && !isStandalone()) {
+            // Show banner after a short delay if beforeinstallprompt didn't fire
+            setTimeout(function() {
+                if (banner && banner.style.display !== 'block' && !isStandalone()) {
+                    mostrarBanner();
+                }
+            }, 3000);
+        }
+
+        // Re-check on resize (orientation change, etc)
+        var resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                if (isMobile() && !isStandalone() && banner) {
+                    if (deferredPrompt || true) mostrarBanner();
+                }
+            }, 500);
+        });
+
+        // Also show if user has visited the page before (sessionStorage check)
+        if (isMobile() && !isStandalone()) {
+            var visitado = sessionStorage.getItem('afemec_visitado');
+            if (!visitado) {
+                sessionStorage.setItem('afemec_visitado', '1');
+            }
+        }
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    console.log('SW registered:', reg.scope);
+                }).catch(function(err) {
+                    console.log('SW error:', err);
+                });
+            });
+        }
+    })();
+    </script>
 </body>
 </html>
