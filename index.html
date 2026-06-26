@@ -566,18 +566,37 @@
 
                 <div id="veedor-equipos-section" style="display:none;">
                     <!-- Timer display -->
-                    <div id="veedor-timer-bar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;margin-bottom:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.06);font-family:var(--font-heading);flex-wrap:wrap;">
+                    <!-- Botones de control fuera del marcador -->
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">
                         <button id="veedor-btn-iniciar" onclick="veedorIniciarPartido()" class="btn-action" style="background:#10b981;color:white;padding:8px 18px;font-weight:700;display:none;">▶ Iniciar</button>
                         <button id="veedor-btn-pausar" onclick="veedorPausarPartido()" class="btn-action" style="background:#f59e0b;color:white;padding:8px 18px;font-weight:700;display:none;">⏸ Pausar</button>
                         <button id="veedor-btn-fin1t" onclick="veedorFinPrimerTiempo()" class="btn-action" style="background:#dc2626;color:white;padding:8px 18px;font-weight:700;display:none;">⏹ Fin 1er Tiempo</button>
                         <button id="veedor-btn-finalizar" onclick="veedorFinalizarPartido()" class="btn-action" style="background:#dc2626;color:white;padding:8px 18px;font-weight:700;display:none;">⏹ Finalizar Partido</button>
-                        <div id="veedor-score-display" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.35);padding:4px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
-                            <span id="veedor-score-a" style="font-size:26px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
-                            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">-</span>
-                            <span id="veedor-score-b" style="font-size:26px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
+                    </div>
+                    <!-- Marcador FIFA integrado con timer GRANDE -->
+                    <div id="veedor-timer-bar" style="display:flex;align-items:stretch;justify-content:center;margin-bottom:12px;font-family:var(--font-heading);">
+                        <div style="display:grid;grid-template-columns:1fr auto 1fr;width:100%;max-width:500px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;">
+                            <!-- Equipo A -->
+                            <div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                                <img id="veedor-logo-a" src="" style="width:18px;height:18px;object-fit:contain;border-radius:3px;display:none;" onerror="this.style.display='none'">
+                                <span id="veedor-nombre-a" style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">LOCAL</span>
+                            </div>
+                            <!-- Centro: Score + Timer -->
+                            <div class="goal-anchor" style="display:flex;flex-direction:column;align-items:center;padding:6px 16px;background:rgba(0,0,0,0.3);min-width:120px;position:relative;">
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span id="veedor-score-a" style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
+                                    <span style="font-size:14px;font-weight:700;color:var(--text-muted);">-</span>
+                                    <span id="veedor-score-b" style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
+                                </div>
+                                <span id="veedor-timer-display" style="font-size:22px;font-weight:800;font-family:monospace;color:white;letter-spacing:2px;">00:00</span>
+                                <span id="veedor-period-display" style="font-size:10px;font-weight:700;color:rgba(16,185,129,0.8);text-transform:uppercase;letter-spacing:1px;">1T</span>
+                            </div>
+                            <!-- Equipo B -->
+                            <div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                                <img id="veedor-logo-b" src="" style="width:18px;height:18px;object-fit:contain;border-radius:3px;display:none;" onerror="this.style.display='none'">
+                                <span id="veedor-nombre-b" style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">VISITA</span>
+                            </div>
                         </div>
-                        <span id="veedor-timer-display" style="font-size:28px;font-weight:800;font-family:monospace;color:white;background:rgba(0,0,0,0.3);padding:2px 10px;border-radius:4px;">00:00</span>
-                        <span id="veedor-period-display" class="badge" style="background:rgba(0,0,0,0.3);color:var(--accent-color);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;">1T</span>
                     </div>
                     <div id="veedor-plantel-dual" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
                         <div id="veedor-col-equipo-a">
@@ -703,74 +722,57 @@
             <div class="section-header-icon">
                 <i data-lucide="bar-chart-3" class="icon-header-accent"></i>
                 <h2>Estadísticas del Torneo</h2>
-                <p>Partidos en vivo, próximos juegos, resultados y tabla de posiciones.</p>
+                <p>Partidos en vivo, próximos juegos, resultados, tabla de posiciones por categoría.</p>
             </div>
 
             <!-- EN VIVO -->
-            <div id="est-en-vivo-section" style="margin-bottom:2rem;">
-                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
-                    <span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;"></span> En Vivo
+            <div id="est-en-vivo-section" style="margin-bottom:1.5rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
+                    <span style="display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;"></span> En Vivo
                 </h3>
                 <div id="est-en-vivo-list"></div>
             </div>
 
             <!-- PRÓXIMOS PARTIDOS -->
-            <div style="margin-bottom:2rem;">
-                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
-                    <i data-lucide="calendar" style="color:var(--primary-color);width:18px;height:18px;"></i> Próximos Partidos
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="calendar" style="color:var(--primary-color);width:16px;height:16px;"></i> Próximos Partidos
                 </h3>
                 <div id="calendario-juegos" class="fixture-timeline"></div>
             </div>
 
             <!-- RESULTADOS -->
-            <div style="margin-bottom:2rem;">
-                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
-                    <i data-lucide="check-circle" style="color:#10b981;width:18px;height:18px;"></i> Últimos Resultados
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="check-circle" style="color:#10b981;width:16px;height:16px;"></i> Últimos Resultados
                 </h3>
-                <div id="lista-resultados" class="fixture-timeline" style="margin-bottom:1rem;"></div>
+                <div id="lista-resultados" class="fixture-timeline" style="margin-bottom:0.5rem;"></div>
             </div>
 
-            <!-- TABLA DE POSICIONES -->
-            <h3 style="font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--text-dark); margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
-                <i data-lucide="trophy" style="color:var(--accent-color)"></i> Tabla de Posiciones General
-            </h3>
-            <div class="table-container">
-                <table class="tabla-deportiva">
-                    <thead>
-                        <tr>
-                            <th style="width: 50px;">Pos</th>
-                            <th>Equipo</th>
-                            <th style="text-align: center;">PJ</th>
-                            <th style="text-align: center;">PG</th>
-                            <th style="text-align: center;">PE</th>
-                            <th style="text-align: center;">PP</th>
-                            <th style="text-align: center;">GF</th>
-                            <th style="text-align: center;">GC</th>
-                            <th style="text-align: center;">DG</th>
-                            <th style="text-align: center; font-weight:700; color:var(--primary-color);">Pts</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-posiciones-body">
-                        <tr><td colspan="10" style="text-align:center;">Cargando tabla de posiciones...</td></tr>
-                    </tbody>
-                </table>
+            <!-- TABLA DE POSICIONES POR CATEGORÍA -->
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.8rem;display:flex;align-items:center;gap:0.5rem;">
+                    <i data-lucide="trophy" style="color:var(--accent-color);width:18px;height:18px;"></i> Tabla de Posiciones por Categoría
+                </h3>
+                <div id="posiciones-por-categoria"></div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem;">
-                <div class="section-card" style="padding:1rem;">
-                    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="goal" style="color:#10b981;width:20px;height:20px;"></i> Máximos Goleadores
+            <!-- GOLEADORES Y TARJETAS -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:0.5rem;">
+                <div class="section-card" style="padding:0.8rem;">
+                    <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="goal" style="color:#10b981;width:18px;height:18px;"></i> Máximos Goleadores
                     </h3>
-                    <div id="goleadores-list">
-                        <div style="color:var(--text-muted);text-align:center;padding:1rem;">Cargando...</div>
+                    <div id="goleadores-list" class="stats-player-list">
+                        <div style="color:var(--text-muted);text-align:center;padding:0.8rem;">Cargando...</div>
                     </div>
                 </div>
-                <div class="section-card" style="padding:1rem;">
-                    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="alert-triangle" style="color:#f59e0b;width:20px;height:20px;"></i> Tarjetas
+                <div class="section-card" style="padding:0.8rem;">
+                    <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="alert-triangle" style="color:#f59e0b;width:18px;height:18px;"></i> Tarjetas y Expulsiones
                     </h3>
-                    <div id="tarjetas-estadisticas-list">
-                        <div style="color:var(--text-muted);text-align:center;padding:1rem;">Cargando...</div>
+                    <div id="tarjetas-estadisticas-list" class="stats-player-list">
+                        <div style="color:var(--text-muted);text-align:center;padding:0.8rem;">Cargando...</div>
                     </div>
                 </div>
             </div>
@@ -785,7 +787,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=9"></script>
 
     <!-- Orientation Toggle -->
     <script>

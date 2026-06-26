@@ -7,7 +7,7 @@ self.addEventListener('install', e => {
         '.',
         './index.html',
         './style.css',
-        './app.js',
+        './app.js?v=9',
         './logo2.png',
         'https://unpkg.com/lucide@latest',
         'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
@@ -46,7 +46,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Cache-first para el resto (CSS, JS, imágenes, CDN)
+  // Network-first para JS (siempre última versión en desarrollo)
+  if (req.url.indexOf('/app.js') !== -1 || req.url.indexOf('/sw.js') !== -1) {
+    e.respondWith(
+      fetch(req).then(function(fetchRes) {
+        var copy = fetchRes.clone();
+        caches.open(CACHE).then(function(cache) { cache.put(req, copy); });
+        return fetchRes;
+      }).catch(function() {
+        return caches.match(req);
+      })
+    );
+    return;
+  }
+
+  // Cache-first para el resto (CSS, imágenes, CDN)
   e.respondWith(
     caches.match(req).then(function(res) {
       return res || fetch(req).then(function(fetchRes) {
