@@ -57,7 +57,6 @@
                 <span style="color:var(--text-muted);font-size:12px;display:block;" id="pwa-banner-text">Instalá la app para una experiencia más rápida</span>
             </div>
             <button id="btn-instalar-pwa" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#7a1a1a;border:none;padding:12px 22px;border-radius:50px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 0 30px var(--accent-glow),0 4px 16px rgba(0,0,0,0.3);animation:pulseGlow 1.8s ease-in-out infinite;white-space:nowrap;letter-spacing:0.5px;">⭐ Instalar App</button>
-            <button id="btn-abrir-pwa" style="display:none;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:12px 22px;border-radius:50px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 0 30px rgba(16,185,129,0.5),0 4px 16px rgba(0,0,0,0.3);white-space:nowrap;letter-spacing:0.5px;">🚀 Abrir en App</button>
             <button id="btn-cerrar-install" style="background:rgba(255,255,255,0.1);color:white;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
     </div>
@@ -68,7 +67,6 @@
             50% { box-shadow:0 0 40px rgba(245,158,11,0.8),0 0 60px rgba(245,158,11,0.3),0 4px 16px rgba(0,0,0,0.3); transform: scale(1.05); }
         }
         #btn-instalar-pwa:active { transform:scale(0.95); }
-        #btn-abrir-pwa:active { transform:scale(0.95); }
     </style>
     <!-- End PWA Banner -->
 
@@ -792,7 +790,6 @@
         var deferredPrompt = null;
         var banner = document.getElementById('pwa-install-banner');
         var btnInstall = document.getElementById('btn-instalar-pwa');
-        var btnAbrir = document.getElementById('btn-abrir-pwa');
         var btnClose = document.getElementById('btn-cerrar-install');
         var bannerTitle = document.getElementById('pwa-banner-title');
         var bannerText = document.getElementById('pwa-banner-text');
@@ -819,16 +816,14 @@
             bannerTitle.textContent = 'AFEMEC Deportes';
             bannerText.textContent = 'Instalá la app para una experiencia más rápida';
             btnInstall.style.display = '';
-            btnAbrir.style.display = 'none';
             banner.style.display = 'block';
         }
 
-        function mostrarAbrirApp() {
+        function mostrarInfoInstalada() {
             if (!banner) return;
-            bannerTitle.textContent = 'AFEMEC Deportes';
-            bannerText.textContent = 'Ya tenés la app instalada. ¿Querés abrirla?';
+            bannerTitle.textContent = '✅ AFEMEC Deportes';
+            bannerText.textContent = 'App instalada. Abrila desde la pantalla de inicio de tu dispositivo.';
             btnInstall.style.display = 'none';
-            btnAbrir.style.display = '';
             banner.style.display = 'block';
         }
 
@@ -843,7 +838,7 @@
 
             // Si ya está instalada (flag localStorage), mostrar "Abrir en App"
             if (isInstalled()) {
-                mostrarAbrirApp();
+                mostrarInfoInstalada();
                 return;
             }
 
@@ -884,17 +879,6 @@
             });
         }
 
-        // Botón "Abrir en App"
-        if (btnAbrir) {
-            btnAbrir.addEventListener('click', function() {
-                // Intentar abrir la URL con el esquema webapk o intent
-                var url = window.location.href.split('#')[0].split('?')[0];
-                // En Android, esto puede sugerir abrir en la app instalada
-                // Redirigir forzando display-mode standalone
-                window.location.href = url + '?source=pwa';
-            });
-        }
-
         // Botón cerrar
         if (btnClose) {
             btnClose.addEventListener('click', function() {
@@ -928,7 +912,7 @@
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function() {
                 if (isStandalone()) { ocultarBanner(); return; }
-                if (isInstalled() && isMobile()) { mostrarAbrirApp(); return; }
+                if (isInstalled() && isMobile()) { mostrarInfoInstalada(); return; }
                 if (isMobile() && !isInstalled() && deferredPrompt &&
                     sessionStorage.getItem(SS_CERRADA) !== 'true') {
                     mostrarInstalar();
