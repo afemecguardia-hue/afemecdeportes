@@ -2,7 +2,7 @@
   "name": "AFEMEC Deportes",
   "short_name": "AFEMEC",
   "description": "Sistema de Gestión Deportiva - Torneo de Alto Rendimiento AFEMEC",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#1a0a0a",
   "theme_color": "#b91c1c",
@@ -35,5 +35,5 @@
   ],
   "categories": ["sports", "utilities"],
   "lang": "es-PY",
-  "scope": "/"
+  "scope": "."
 }

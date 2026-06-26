@@ -1,21 +1,20 @@
 const CACHE = 'afemec-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/logo2.png',
-  '/manifest.json',
-  'https://unpkg.com/lucide@latest',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap'
-];
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(cache => {
-      return cache.addAll(urlsToCache);
+      return cache.addAll([
+        '.',
+        './index.html',
+        './style.css',
+        './app.js',
+        './logo2.png',
+        './manifest.json',
+        'https://unpkg.com/lucide@latest',
+        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap'
+      ]);
     })
   );
   self.skipWaiting();
@@ -31,17 +30,20 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  var req = e.request;
+  if (req.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(res => {
-      return res || fetch(e.request).then(fetchRes => {
-        if (e.request.url.startsWith(self.location.origin) || e.request.url.includes('cdn.')) {
-          const copy = fetchRes.clone();
-          caches.open(CACHE).then(cache => cache.put(e.request, copy));
+    caches.match(req).then(res => {
+      return res || fetch(req).then(fetchRes => {
+        var url = req.url;
+        if (url.startsWith(self.location.origin) && url.indexOf('supabase') === -1) {
+          var copy = fetchRes.clone();
+          caches.open(CACHE).then(cache => cache.put(req, copy));
         }
         return fetchRes;
       });
-    }).catch(() => {
-      if (e.request.mode === 'navigate') return caches.match('/');
+    }).catch(function() {
+      if (req.mode === 'navigate') return caches.match('./index.html');
       return new Response('', { status: 503 });
     })
   );
