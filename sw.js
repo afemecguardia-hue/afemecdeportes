@@ -9,7 +9,6 @@ self.addEventListener('install', e => {
         './style.css',
         './app.js',
         './logo2.png',
-        './manifest.json',
         'https://unpkg.com/lucide@latest',
         'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
         'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
