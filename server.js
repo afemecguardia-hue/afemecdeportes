@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
         if (error) {
             if (error.code === 'ENOENT') {
                 // Si es un archivo de asset inexistente, devolver 404
-                if (filePath.includes('/assets/') || extname !== '.html' && extname !== '') {
+                if (extname !== '' && extname !== '.html') {
                     res.writeHead(404, { 'Content-Type': 'text/plain' });
                     res.end('File Not Found');
                 } else {

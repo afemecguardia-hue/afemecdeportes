@@ -12,29 +12,32 @@
     <style>
         .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 26px; transition: .3s; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.15); border-radius: 26px; transition: .3s; }
         .toggle-slider::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
         .toggle-switch input:checked + .toggle-slider { background: #10b981; }
         .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
         .row-disabled { opacity: 0.5; }
         .badge-status-socio { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-        .badge-status-socio.activo { background: #d1fae5; color: #065f46; }
-        .badge-status-socio.inactivo { background: #fee2e2; color: #991b1b; }
+        .badge-status-socio.activo { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+        .badge-status-socio.inactivo { background: rgba(239,68,68,0.15); color: #fca5a5; }
         .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
         .admin-full { grid-column: 1 / -1; }
         .search-result-card { margin-top: 1rem; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
-        .info-item { padding: 0.75rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
-        .info-item label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
-        .info-item span { font-weight: 600; color: #1e293b; }
+        .info-item { padding: 0.75rem; background: rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); backdrop-filter:blur(4px); }
+        .info-item label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 4px; }
+        .info-item span { font-weight: 600; color: white; }
         .btn-sm { padding: 0.35rem 0.75rem; font-size: 13px; }
-        .admin-tabs { display: flex; gap: 1px; margin-bottom: 1.5rem; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
-        .admin-tabs button { flex: 1; padding: 0.6rem; border: none; background: transparent; font-weight: 600; cursor: pointer; transition: .2s; }
-        .admin-tabs button.active { background: white; color: var(--primary-color); }
+        .admin-tabs { display: flex; gap: 1px; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; border:1px solid rgba(255,255,255,0.06); }
+        .admin-tabs button { flex: 1; padding: 0.6rem; border: none; background: transparent; font-weight: 600; cursor: pointer; transition: .2s; color:rgba(255,255,255,0.6); }
+        .admin-tabs button.active { background: rgba(245,158,11,0.15); color: var(--accent-color); }
         .admin-tab-content { display: none; }
         .admin-tab-content.active { display: block; }
         .flex-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
         .mt-1 { margin-top: 1rem; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(8px); }
+        .modal { background:linear-gradient(145deg,rgba(40,10,10,0.95),rgba(20,5,5,0.98)); border-radius:16px; padding:24px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.08); color:white; }
     </style>
 </head>
 <body>
@@ -42,7 +45,7 @@
         <div class="header-container">
             <div class="brand">
                 <div class="logo-wrapper">
-                    <img src="logo-afemec.png" alt="Logo AFEMEC" id="main-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <img src="logo2.png" alt="Logo AFEMEC" id="main-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     <div class="logo-fallback" style="display:none;"><i data-lucide="trophy"></i></div>
                 </div>
                 <div class="brand-text">
@@ -64,8 +67,8 @@
                 <button id="nav-caja" style="display:none;" onclick="showSection('caja')" class="nav-btn nav-role-caja">
                     <i data-lucide="wallet"></i><span>Caja</span>
                 </button>
-                <button onclick="showSection('programacion')" class="nav-btn" id="btn-programacion">
-                    <i data-lucide="calendar"></i><span>Programación</span>
+                <button onclick="showSection('programacion')" class="nav-btn active" id="btn-programacion">
+                    <i data-lucide="bar-chart-3"></i><span>Estadísticas</span>
                 </button>
                 <div class="nav-separator"></div>
                 <button id="nav-login" onclick="showSection('login')" class="nav-btn btn-login">
@@ -136,7 +139,7 @@
                         <h4 id="insc-nombre">---</h4>
                         <span>CI Titular: <strong id="insc-ci-label"></strong> · Estado: <strong id="insc-estado-label"></strong></span>
                         <div class="mt-1" style="font-size: 13px; font-weight: 500;">
-                            Cupo de Adherentes: <span id="insc-cupo-contador" style="font-weight: 700; color: var(--primary-color);">0 / 6</span>
+                            Atletas inscriptos: <span id="insc-cupo-contador" style="font-weight: 700; color: var(--primary-color);">0 / 6</span>
                         </div>
                     </div>
                 </div>
@@ -153,9 +156,13 @@
                             <input type="text" id="insc-atleta-ci" class="form-input" placeholder="CI del atleta">
                         </div>
                         <div class="form-group">
-                            <label for="insc-atleta-edad">Edad (Años)</label>
-                            <input type="number" id="insc-atleta-edad" class="form-input" min="0" max="99" placeholder="Ej. 25" oninput="calcularCategoriaAutomatica(this.value)">
-                            <small style="color:var(--primary-color); font-weight: 600; display: block; margin-top: 4px;">Categoría Estimada: <span id="insc-atleta-categoria-label">Libre</span></small>
+                            <label for="insc-atleta-fecha-nac">Fecha de Nacimiento</label>
+                            <input type="date" id="insc-atleta-fecha-nac" class="form-input" onchange="calcularCategoriaAutomatica(this.value)">
+                            <small style="color:var(--text-muted); display: block; margin-top: 4px;">Edad: <span id="insc-atleta-edad-label">---</span> años &nbsp;|&nbsp; Categoría: <span id="insc-atleta-categoria-label">---</span></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="insc-atleta-telefono">Teléfono <small style="color:var(--text-muted);">(opcional)</small></label>
+                            <input type="text" id="insc-atleta-telefono" class="form-input" placeholder="Ej. 0981 123 456">
                         </div>
                     </div>
                     <div class="form-group">
@@ -169,11 +176,13 @@
                                 <span>Inscribir Atleta</span>
                             </button>
                         </div>
+                        <div id="insc-categoria-checkboxes" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+                        <div id="insc-categoria-info" style="margin-top:4px;font-size:13px;color:var(--text-muted);min-height:20px;"></div>
                     </div>
                 </div>
 
-                <div id="insc-cupo-lleno-msg" style="display:none; padding:1rem; background:#fee2e2; color:#991b1b; border-radius:8px; margin-top:1rem; text-align:center; font-weight:600;">
-                    ⚠️ Cupo lleno (6/6). Este socio titular ya ha alcanzado el límite máximo de 6 adherentes.
+                <div id="insc-cupo-lleno-msg" style="display:none; padding:1rem; background:rgba(239,68,68,0.15); color:#fca5a5; border-radius:8px; margin-top:1rem; text-align:center; font-weight:600;">
+                    ⚠️ Cupo lleno (6/6). Este socio titular ya ha alcanzado el límite máximo de 6 atletas inscriptos.
                 </div>
             </div>
         </section>
@@ -191,7 +200,9 @@
                 <button onclick="switchAdminTab('equipos', this)">Equipos</button>
                 <button onclick="switchAdminTab('categorias', this)">Categorías</button>
                 <button onclick="switchAdminTab('canchas', this)">Canchas</button>
+                <button onclick="switchAdminTab('tarjetas', this)">Tarjetas</button>
                 <button onclick="switchAdminTab('partidos', this)">Partidos</button>
+                <button onclick="switchAdminTab('atletas', this)">Atletas</button>
                 <button onclick="switchAdminTab('busqueda', this)">Búsqueda por CI</button>
             </div>
 
@@ -221,20 +232,20 @@
             <div id="admin-tab-equipos" class="admin-tab-content">
                 <h3>Gestión de Equipos</h3>
                 <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Carga el nombre y el logo oficial para cada equipo del torneo.</p>
-                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem;">
+                <div class="flex-row mt-1" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); gap: 1rem; backdrop-filter:blur(4px);">
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px;">
-                        <label for="admin-nuevo-equipo" style="font-size:12px; font-weight:600; color:#64748b;">Nombre del Equipo</label>
+                        <label for="admin-nuevo-equipo" style="font-size:12px; font-weight:600; color:var(--accent-color);">Nombre del Equipo</label>
                         <input type="text" id="admin-nuevo-equipo" class="form-input" placeholder="Ej. Fénix FC">
                     </div>
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px;">
-                        <label for="admin-logo-equipo" style="font-size:12px; font-weight:600; color:#64748b;">Logo (JPG, PNG, GIF - Máx. 500KB)</label>
+                        <label for="admin-logo-equipo" style="font-size:12px; font-weight:600; color:var(--accent-color);">Logo (JPG, PNG, GIF - Máx. 500KB)</label>
                         <input type="file" id="admin-logo-equipo" class="form-input" accept="image/png, image/jpeg, image/gif" style="padding: 4px;">
                     </div>
                     <button onclick="agregarEquipo()" class="btn-primary btn-sm" style="align-self: flex-end; height: 42px;">Agregar Equipo</button>
                 </div>
                 <div class="table-container mt-1">
                     <table class="tabla-deportiva">
-                        <thead><tr><th>ID</th><th>Logo</th><th>Nombre</th><th>Acciones</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Logo</th><th>Nombre</th><th>Cupo Máx.</th><th>Categorías</th><th>Acciones</th></tr></thead>
                         <tbody id="admin-equipos-body"></tbody>
                     </table>
                 </div>
@@ -244,18 +255,22 @@
             <div id="admin-tab-categorias" class="admin-tab-content">
                 <h3>Gestión de Categorías y Rangos de Edades</h3>
                 <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Configura los rangos de edad para clasificar automáticamente a los atletas.</p>
-                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem;">
+                <div class="flex-row mt-1" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); gap: 1rem; backdrop-filter:blur(4px);">
                     <div style="flex: 2; display: flex; flex-direction: column; gap: 0.5rem; min-width: 150px;">
-                        <label for="admin-cat-nombre" style="font-size:12px; font-weight:600; color:#64748b;">Nombre de la Categoría</label>
+                        <label for="admin-cat-nombre" style="font-size:12px; font-weight:600; color:var(--accent-color);">Nombre de la Categoría</label>
                         <input type="text" id="admin-cat-nombre" class="form-input" placeholder="Ej. Master">
                     </div>
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
-                        <label for="admin-cat-min" style="font-size:12px; font-weight:600; color:#64748b;">Edad Mín.</label>
+                        <label for="admin-cat-min" style="font-size:12px; font-weight:600; color:var(--accent-color);">Edad Mín.</label>
                         <input type="number" id="admin-cat-min" class="form-input" placeholder="0">
                     </div>
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
-                        <label for="admin-cat-max" style="font-size:12px; font-weight:600; color:#64748b;">Edad Máx.</label>
+                        <label for="admin-cat-max" style="font-size:12px; font-weight:600; color:var(--accent-color);">Edad Máx.</label>
                         <input type="number" id="admin-cat-max" class="form-input" placeholder="99">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
+                        <label for="admin-cat-jugadores" style="font-size:12px; font-weight:600; color:var(--accent-color);">Jug. x Equipo (0=sin límite)</label>
+                        <input type="number" id="admin-cat-jugadores" class="form-input" placeholder="5">
                     </div>
                     <button onclick="agregarCategoria()" class="btn-primary btn-sm" style="align-self: flex-end; height: 42px;">Agregar</button>
                 </div>
@@ -266,6 +281,8 @@
                                 <th>Nombre</th>
                                 <th>Edad Mínima</th>
                                 <th>Edad Máxima</th>
+                                <th>Jug. x Equipo</th>
+                                <th>Equipos</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -278,9 +295,9 @@
             <div id="admin-tab-canchas" class="admin-tab-content">
                 <h3>Gestión de Canchas / Sedes</h3>
                 <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Administra las canchas disponibles del predio deportivo.</p>
-                <div class="flex-row mt-1" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; gap: 1rem; align-items: flex-end;">
+                <div class="flex-row mt-1" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); gap: 1rem; align-items: flex-end; backdrop-filter:blur(4px);">
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
-                        <label for="admin-cancha-nombre" style="font-size:12px; font-weight:600; color:#64748b;">Nombre de la Cancha</label>
+                        <label for="admin-cancha-nombre" style="font-size:12px; font-weight:600; color:var(--accent-color);">Nombre de la Cancha</label>
                         <input type="text" id="admin-cancha-nombre" class="form-input" placeholder="Ej. Cancha Principal">
                     </div>
                     <button onclick="agregarCancha()" class="btn-primary btn-sm" style="height: 42px;">Agregar Cancha</button>
@@ -299,12 +316,81 @@
                 </div>
             </div>
 
+            <!-- TAB: ATLETAS -->
+            <div id="admin-tab-atletas" class="admin-tab-content">
+                <h3>Control de Atletas Inscriptos</h3>
+                <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+                    <div class="kpi-card" style="flex:1; min-width:180px; padding:1rem; background:linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);">
+                        <div class="kpi-details">
+                            <span class="kpi-label">TOTAL ADHERENTES</span>
+                            <strong class="kpi-value" style="font-size:1.5rem;" id="admin-total-adherentes">0</strong>
+                        </div>
+                    </div>
+                    <div class="kpi-card" style="flex:1; min-width:180px; padding:1rem; background:linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                        <div class="kpi-details">
+                            <span class="kpi-label">TOTAL ATLETAS INSCRIPTOS</span>
+                            <strong class="kpi-value" style="font-size:1.5rem;" id="admin-total-atletas">0</strong>
+                        </div>
+                    </div>
+                </div>
+                <div id="atletas-categorias-container">
+                    <!-- Categorías con sus equipos -->
+                </div>
+                <div id="atletas-equipo-detalle" style="display:none; margin-top:1rem;">
+                    <button onclick="volverAtletasCategorias()" class="btn-action" style="background:#64748b;color:white;padding:4px 12px;margin-bottom:0.75rem;">← Volver</button>
+                    <h4 id="atletas-equipo-titulo"></h4>
+                    <div class="table-container">
+                        <table class="tabla-deportiva">
+                            <thead>
+                                <tr>
+                                    <th>CI</th>
+                                    <th>Nombre</th>
+                                    <th>Edad</th>
+                                    <th>Categoría</th>
+                                    <th>Inscripto por</th>
+                                    <th>Partidos</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-atletas-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: TARJETAS -->
+            <div id="admin-tab-tarjetas" class="admin-tab-content">
+                <h3>Configuración de Tarjetas / Faltas</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Administrá los tipos de sanción, sus nombres y montos.</p>
+                <div class="flex-row mt-1" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); gap: 1rem; backdrop-filter:blur(4px);">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label for="admin-tarjeta-tipo" style="font-size:12px; font-weight:600; color:var(--accent-color);">Identificador</label>
+                        <input type="text" id="admin-tarjeta-tipo" class="form-input" placeholder="Ej. amarilla">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label for="admin-tarjeta-nombre" style="font-size:12px; font-weight:600; color:var(--accent-color);">Nombre / Concepto</label>
+                        <input type="text" id="admin-tarjeta-nombre" class="form-input" placeholder="Ej. Tarjeta Amarilla">
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label for="admin-tarjeta-monto" style="font-size:12px; font-weight:600; color:var(--accent-color);">Monto (GS.)</label>
+                        <input type="number" id="admin-tarjeta-monto" class="form-input" placeholder="20000">
+                    </div>
+                    <button onclick="agregarConfigFalta()" class="btn-primary btn-sm" style="align-self: flex-end; height: 42px;">Agregar</button>
+                </div>
+                <div class="table-container mt-1">
+                    <table class="tabla-deportiva">
+                        <thead><tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th>Acciones</th></tr></thead>
+                        <tbody id="admin-tarjetas-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- TAB: PARTIDOS -->
             <div id="admin-tab-partidos" class="admin-tab-content">
                 <h3>Programación de Fixture y Marcadores</h3>
                 <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Calendariza los juegos y carga los resultados finales.</p>
                 
-                <div style="background: #f8fafc; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+                <div style="background: rgba(0,0,0,0.2); padding: 1.25rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 1.5rem; backdrop-filter:blur(4px);">
                     <h4 style="margin-bottom: 1rem; font-size: 15px;">Programar Nuevo Partido</h4>
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                         <div class="form-group">
@@ -322,6 +408,10 @@
                         <div class="form-group">
                             <label for="admin-partido-cancha">Cancha / Sede</label>
                             <select id="admin-partido-cancha" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-partido-categoria">Categoría</label>
+                            <select id="admin-partido-categoria" class="form-input"></select>
                         </div>
                     </div>
                     <button onclick="programarPartido()" class="btn-primary btn-block">
@@ -403,35 +493,81 @@
                 <div class="discipline-control">
                     <div class="form-group">
                         <label>Tipo de Sanción</label>
-                        <div class="card-select-grid">
-                            <label class="card-option yellow">
-                                <input type="radio" name="falta-opt" value="amarilla" checked>
-                                <span class="card-box"></span>
-                                <span class="card-text">Amarilla <br><small>20.000 GS.</small></span>
-                            </label>
-                            <label class="card-option blue">
-                                <input type="radio" name="falta-opt" value="azul">
-                                <span class="card-box"></span>
-                                <span class="card-text">Azul (2 min) <br><small>20.000 GS.</small></span>
-                            </label>
-                            <label class="card-option red">
-                                <input type="radio" name="falta-opt" value="roja">
-                                <span class="card-box"></span>
-                                <span class="card-text">Roja <br><small>50.000 GS.</small></span>
-                            </label>
+                        <div class="card-select-grid" id="veedor-card-options">
+                            <!-- Se renderiza dinámicamente desde config_faltas -->
                         </div>
                     </div>
 
-                    <select id="tipo-falta" style="display:none;">
-                        <option value="amarilla">Amarilla</option>
-                        <option value="azul">Azul</option>
-                        <option value="roja">Roja</option>
-                    </select>
+                    <select id="tipo-falta" style="display:none;"></select>
 
                     <button onclick="cargarFaltaUI()" class="btn-danger btn-block">
                         <i data-lucide="plus-circle"></i>
                         <span>Cargar Falta</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- Veedor: Goles / Tarjetas en partido (roster-based) -->
+            <div style="margin-top:2rem;border-top:2px solid var(--border);padding-top:1.5rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.5rem;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="soccer" style="color:var(--primary-color);width:20px;height:20px;"></i> Goles / Tarjetas en Partido
+                </h3>
+                <p style="color:var(--text-muted);font-size:13px;margin-bottom:1rem;">Seleccioná el partido y el equipo, y marcá goles o tarjetas sobre la lista de jugadores.</p>
+
+                <div class="flex-row" style="gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <div class="form-group" style="flex:1;min-width:200px;">
+                        <label>Partido</label>
+                        <select id="veedor-evento-partido" onchange="veedorCargarEquipos()">
+                            <option value="">Primero cargá los partidos...</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:0 0 100px;">
+                        <label>Minuto</label>
+                        <input type="number" id="veedor-evento-minuto" value="0" min="0" max="120" style="width:70px;">
+                    </div>
+                    <div style="display:flex;align-items:flex-end;">
+                        <button onclick="veedorCargarPartidos()" class="btn-search btn-sm">
+                            <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Cargar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="veedor-equipos-section" style="display:none;">
+                    <!-- Timer display -->
+                    <div id="veedor-timer-bar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;margin-bottom:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.06);font-family:var(--font-heading);flex-wrap:wrap;">
+                        <button id="veedor-btn-iniciar" onclick="veedorIniciarPartido()" class="btn-action" style="background:#10b981;color:white;padding:8px 18px;font-weight:700;display:none;">▶ Iniciar</button>
+                        <button id="veedor-btn-pausar" onclick="veedorPausarPartido()" class="btn-action" style="background:#f59e0b;color:white;padding:8px 18px;font-weight:700;display:none;">⏸ Pausar</button>
+                        <button id="veedor-btn-fin1t" onclick="veedorFinPrimerTiempo()" class="btn-action" style="background:#dc2626;color:white;padding:8px 18px;font-weight:700;display:none;">⏹ Fin 1er Tiempo</button>
+                        <button id="veedor-btn-finalizar" onclick="veedorFinalizarPartido()" class="btn-action" style="background:#dc2626;color:white;padding:8px 18px;font-weight:700;display:none;">⏹ Finalizar Partido</button>
+                        <div id="veedor-score-display" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.35);padding:4px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
+                            <span id="veedor-score-a" style="font-size:26px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
+                            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">-</span>
+                            <span id="veedor-score-b" style="font-size:26px;font-weight:900;color:var(--accent-color);line-height:1;">0</span>
+                        </div>
+                        <span id="veedor-timer-display" style="font-size:28px;font-weight:800;font-family:monospace;color:white;background:rgba(0,0,0,0.3);padding:2px 10px;border-radius:4px;">00:00</span>
+                        <span id="veedor-period-display" class="badge" style="background:rgba(0,0,0,0.3);color:var(--accent-color);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;">1T</span>
+                    </div>
+                    <div id="veedor-plantel-dual" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                        <div id="veedor-col-equipo-a">
+                            <h4 style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:0.5rem;display:flex;align-items:center;gap:6px;">
+                                <i data-lucide="shield" style="width:16px;height:16px;color:var(--primary-color);"></i>
+                                <span id="veedor-nom-equipo-a"></span>
+                            </h4>
+                            <div id="veedor-lista-a" style="display:flex;flex-direction:column;gap:4px;max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                        <div id="veedor-col-equipo-b">
+                            <h4 style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:0.5rem;display:flex;align-items:center;gap:6px;">
+                                <i data-lucide="shield" style="width:16px;height:16px;color:var(--primary-color);"></i>
+                                <span id="veedor-nom-equipo-b"></span>
+                            </h4>
+                            <div id="veedor-lista-b" style="display:flex;flex-direction:column;gap:4px;max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+
+                    <div id="veedor-eventos-partido" style="margin-top:1rem;padding:0.75rem;background:var(--bg);border-radius:10px;">
+                        <h4 style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Eventos del partido</h4>
+                        <div id="veedor-eventos-lista"></div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -441,7 +577,7 @@
             <div class="section-header-icon">
                 <i data-lucide="wallet" class="icon-header-accent"></i>
                 <h2>Arqueo de Caja / Cobro de Multas</h2>
-                <p>Visualizá y gestioná las deudas de tarjetas en tiempo real.</p>
+                <p>Visualizá, cobrá multas de tarjetas y consultá el histórico de pagos.</p>
             </div>
 
             <div class="kpi-card">
@@ -455,6 +591,7 @@
             </div>
 
             <h3 class="table-title">Deudas Pendientes</h3>
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:8px;">Las tarjetas cargadas durante los partidos aparecen aquí al finalizar el partido.</p>
             <div class="table-container">
                 <table class="tabla-deportiva">
                     <thead>
@@ -462,66 +599,147 @@
                             <th>CI Jugador</th>
                             <th>Nombre</th>
                             <th>Falta</th>
+                            <th>Categoría</th>
+                            <th>Equipo</th>
                             <th class="monto-col">Monto</th>
                             <th>Acción</th>
                         </tr>
                     </thead>
                     <tbody id="lista-cobros">
-                        <tr><td colspan="5" class="table-loading"><i data-lucide="loader-2" class="spin"></i> Cargando deudas...</td></tr>
+                        <tr><td colspan="7" class="table-loading"><i data-lucide="loader-2" class="spin"></i> Cargando deudas...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 class="table-title" style="margin-top:2rem;">Histórico de Cobros</h3>
+            <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Buscá por fecha y/o número de cédula para ver el historial completo de la temporada.</p>
+            
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;background:rgba(0,0,0,0.2);padding:1rem;border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
+                <div class="form-group" style="flex:1;min-width:150px;">
+                    <label style="font-size:12px;color:var(--accent-color);font-weight:600;">Desde</label>
+                    <input type="date" id="hist-fecha-desde" class="form-input" style="padding:6px 10px;">
+                </div>
+                <div class="form-group" style="flex:1;min-width:150px;">
+                    <label style="font-size:12px;color:var(--accent-color);font-weight:600;">Hasta</label>
+                    <input type="date" id="hist-fecha-hasta" class="form-input" style="padding:6px 10px;">
+                </div>
+                <div class="form-group" style="flex:1;min-width:150px;">
+                    <label style="font-size:12px;color:var(--accent-color);font-weight:600;">CI del Atleta</label>
+                    <input type="text" id="hist-ci" class="form-input" placeholder="Ej. 76537" style="padding:6px 10px;">
+                </div>
+                <button onclick="buscarHistoricoCobros()" class="btn-search btn-sm" style="height:36px;">
+                    <i data-lucide="search" style="width:14px;height:14px;"></i> Buscar
+                </button>
+                <button onclick="cargarArqueo()" class="btn-action btn-sm" style="background:#64748b;color:white;padding:6px 14px;height:36px;">
+                    <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Hoy
+                </button>
+            </div>
+
+            <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+                <button onclick="descargarArqueoExcel()" class="btn-success btn-sm">
+                    <i data-lucide="file-spreadsheet"></i> Descargar Excel
+                </button>
+            </div>
+            <div class="kpi-card" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%); margin-bottom:1rem;">
+                <div class="kpi-icon"><i data-lucide="badge-dollar-sign"></i></div>
+                <div class="kpi-details">
+                    <span class="kpi-label">TOTAL ARQUEO</span>
+                    <strong class="kpi-value" id="arqueo-total">0 GS.</strong>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="tabla-deportiva">
+                    <thead>
+                        <tr>
+                            <th>Fecha Pago</th>
+                            <th>CI Jugador</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Equipo</th>
+                            <th class="monto-col">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="arqueo-body">
+                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Cargando...</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <!-- ========== PROGRAMACIÓN ========== -->
-        <section id="programacion" style="display:none;" class="section-card">
+        <!-- ========== ESTADÍSTICAS (libre acceso) ========== -->
+        <section id="programacion" style="display:block;" class="section-card">
             <div class="section-header-icon">
-                <i data-lucide="calendar" class="icon-header-accent"></i>
-                <h2>Programación y Resultados</h2>
-                <p>Calendario oficial de partidos del torneo, resultados y tabla de posiciones en tiempo real.</p>
+                <i data-lucide="bar-chart-3" class="icon-header-accent"></i>
+                <h2>Estadísticas del Torneo</h2>
+                <p>Partidos en vivo, próximos juegos, resultados y tabla de posiciones.</p>
             </div>
 
-            <div class="admin-tabs" style="margin-bottom: 1.5rem;">
-                <button class="active" id="btn-prog-proximos" onclick="switchProgTab('proximos', this)">Próximos Juegos</button>
-                <button id="btn-prog-resultados" onclick="switchProgTab('resultados', this)">Resultados y Tabla</button>
-            </div>
-
-            <!-- TAB: PRÓXIMOS JUEGOS -->
-            <div id="prog-tab-proximos" class="prog-tab-content">
-                <div id="calendario-juegos" class="fixture-timeline">
-                    <!-- Se carga dinámicamente -->
-                </div>
-            </div>
-
-            <!-- TAB: RESULTADOS Y TABLA -->
-            <div id="prog-tab-resultados" class="prog-tab-content" style="display:none;">
-                <div id="lista-resultados" class="fixture-timeline" style="margin-bottom: 2rem;">
-                    <!-- Se carga dinámicamente -->
-                </div>
-                
-                <h3 style="font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--text-dark); margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
-                    <i data-lucide="trophy" style="color:var(--accent-color)"></i> Tabla de Posiciones General
+            <!-- EN VIVO -->
+            <div id="est-en-vivo-section" style="margin-bottom:2rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
+                    <span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;"></span> En Vivo
                 </h3>
-                <div class="table-container">
-                    <table class="tabla-deportiva">
-                        <thead>
-                            <tr>
-                                <th style="width: 50px;">Pos</th>
-                                <th>Equipo</th>
-                                <th style="text-align: center;">PJ</th>
-                                <th style="text-align: center;">PG</th>
-                                <th style="text-align: center;">PE</th>
-                                <th style="text-align: center;">PP</th>
-                                <th style="text-align: center;">GF</th>
-                                <th style="text-align: center;">GC</th>
-                                <th style="text-align: center;">DG</th>
-                                <th style="text-align: center; font-weight:700; color:var(--primary-color);">Pts</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-posiciones-body">
-                            <tr><td colspan="10" style="text-align:center;">Cargando tabla de posiciones...</td></tr>
-                        </tbody>
-                    </table>
+                <div id="est-en-vivo-list"></div>
+            </div>
+
+            <!-- PRÓXIMOS PARTIDOS -->
+            <div style="margin-bottom:2rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="calendar" style="color:var(--primary-color);width:18px;height:18px;"></i> Próximos Partidos
+                </h3>
+                <div id="calendario-juegos" class="fixture-timeline"></div>
+            </div>
+
+            <!-- RESULTADOS -->
+            <div style="margin-bottom:2rem;">
+                <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="check-circle" style="color:#10b981;width:18px;height:18px;"></i> Últimos Resultados
+                </h3>
+                <div id="lista-resultados" class="fixture-timeline" style="margin-bottom:1rem;"></div>
+            </div>
+
+            <!-- TABLA DE POSICIONES -->
+            <h3 style="font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--text-dark); margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
+                <i data-lucide="trophy" style="color:var(--accent-color)"></i> Tabla de Posiciones General
+            </h3>
+            <div class="table-container">
+                <table class="tabla-deportiva">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Pos</th>
+                            <th>Equipo</th>
+                            <th style="text-align: center;">PJ</th>
+                            <th style="text-align: center;">PG</th>
+                            <th style="text-align: center;">PE</th>
+                            <th style="text-align: center;">PP</th>
+                            <th style="text-align: center;">GF</th>
+                            <th style="text-align: center;">GC</th>
+                            <th style="text-align: center;">DG</th>
+                            <th style="text-align: center; font-weight:700; color:var(--primary-color);">Pts</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-posiciones-body">
+                        <tr><td colspan="10" style="text-align:center;">Cargando tabla de posiciones...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem;">
+                <div class="section-card" style="padding:1rem;">
+                    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="goal" style="color:#10b981;width:20px;height:20px;"></i> Máximos Goleadores
+                    </h3>
+                    <div id="goleadores-list">
+                        <div style="color:var(--text-muted);text-align:center;padding:1rem;">Cargando...</div>
+                    </div>
+                </div>
+                <div class="section-card" style="padding:1rem;">
+                    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="alert-triangle" style="color:#f59e0b;width:20px;height:20px;"></i> Tarjetas
+                    </h3>
+                    <div id="tarjetas-estadisticas-list">
+                        <div style="color:var(--text-muted);text-align:center;padding:1rem;">Cargando...</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -534,26 +752,7 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
-    <script>
-        function cargarFaltaUI() {
-            const radioVal = document.querySelector('input[name="falta-opt"]:checked').value;
-            document.getElementById('tipo-falta').value = radioVal;
-            cargarFalta();
-        }
-
-        function switchAdminTab(tab, btn) {
-            document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
-            document.getElementById('admin-tab-' + tab).style.display = 'block';
-            
-            if (tab === 'equipos') cargarEquiposAdmin();
-            if (tab === 'socios') cargarListadoSocios();
-            if (tab === 'categorias') cargarCategoriasAdmin();
-            if (tab === 'canchas') cargarCanchasAdmin();
-            if (tab === 'partidos') cargarPartidosAdmin();
-        }
-    </script>
 </body>
 </html>
