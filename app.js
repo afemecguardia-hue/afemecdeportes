@@ -1957,6 +1957,8 @@ function renderPlantelEquipo(containerId, atletas, equipoId, eventos, titularesM
     });
 }
 
+var _ultimoMinutoPartido = {};
+
 function obtenerMinutoActual(partidoId) {
     var tick = _timerTicks[partidoId];
     if (tick && tick.data) {
@@ -1966,9 +1968,11 @@ function obtenerMinutoActual(partidoId) {
         } else {
             t = obtenerTiempoActual(tick.data);
         }
-        if (tick.data.periodo === 'segundo_tiempo') t -= (tick.data.tiempo_1t || 0);
-        return Math.floor(Math.max(0, t) / 60);
+        var min = Math.floor(Math.max(0, t) / 60);
+        _ultimoMinutoPartido[partidoId] = min;
+        return min;
     }
+    if (_ultimoMinutoPartido[partidoId] !== undefined) return _ultimoMinutoPartido[partidoId];
     var input = document.getElementById('veedor-evento-minuto');
     return input ? (parseInt(input.value) || 0) : 0;
 }
@@ -2094,12 +2098,12 @@ function formatearTiempo(seg) {
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function obtenerPeriodoLabel(p) {
+function obtenerPeriodoLabel(p, t) {
     const map = { 'primer_tiempo': '1T', 'segundo_tiempo': '2T', 'entretiempo': 'ENTRET' };
     const l = map[p.periodo] || '1T';
-    const extra = _extraTargets[p.id];
-    if (p.periodo === 'primer_tiempo' && extra) return '1T+ADIC';
-    if (p.periodo === 'segundo_tiempo' && extra) return '2T+ADIC';
+    if (t === undefined) t = obtenerTiempoActual(p);
+    const limite = p.periodo === 'primer_tiempo' ? 2700 : 5400;
+    if (t > limite) return l + '+';
     return l;
 }
 
@@ -2114,12 +2118,13 @@ function obtenerTiempoActual(p) {
 }
 
 function obtenerTiempoDisplay(p) {
-    let t = obtenerTiempoActual(p);
-    // En 2T, restar el tiempo del 1T para mostrar contador desde 0
-    if (p.periodo === 'segundo_tiempo') {
-        t -= (p.tiempo_1t || 0);
-    }
-    return Math.max(0, t);
+    return Math.max(0, obtenerTiempoActual(p));
+}
+
+function obtenerTiempoAdicional(p, t) {
+    if (t === undefined) t = obtenerTiempoActual(p);
+    const limite = p.periodo === 'primer_tiempo' ? 2700 : 5400;
+    return Math.max(0, t - limite);
 }
 
 function arrancarTimerPartido(pid) {
@@ -2166,12 +2171,7 @@ function arrancarTimerPartido(pid) {
             }
 
             var extraTarget = _extraTargets[pid];
-            var debePausar = false;
-            if (p.periodo === 'primer_tiempo') {
-                debePausar = extraTarget ? t >= extraTarget : t >= 2700;
-            } else if (p.periodo === 'segundo_tiempo') {
-                debePausar = extraTarget ? t >= extraTarget : t >= 5400;
-            }
+            var debePausar = extraTarget ? t >= extraTarget : false;
             if (debePausar) {
                 supabaseClient.from('partidos').update({ en_curso: false, tiempo_jugado: t, inicio_periodo: null }).eq('id', pid).then(function() {
                     if (p.periodo === 'primer_tiempo') {
@@ -2189,8 +2189,7 @@ function arrancarTimerPartido(pid) {
                 return;
             }
 
-            var displayT = p.periodo === 'segundo_tiempo' ? (t - (p.tiempo_1t || 0)) : t;
-            actualizarDisplayTimer(pid, Math.max(0, displayT), p);
+            actualizarDisplayTimer(pid, t, p);
             if (_veedorPartidoActual && _veedorPartidoActual.id == pid && p.periodo === 'segundo_tiempo' && p.en_curso) {
                 var fb2 = document.getElementById('veedor-btn-finalizar');
                 if (fb2) fb2.style.display = 'inline-block';
@@ -2211,12 +2210,11 @@ function detenerTimerPartido(pid) {
     if (!tick) return;
     clearInterval(tick.interval);
     if (tick.refresh) clearInterval(tick.refresh);
-    tick.interval = null;
-    tick.refresh = null;
+    delete _timerTicks[pid];
 }
 
 function actualizarDisplayTimer(pid, seg, partido) {
-    const label = obtenerPeriodoLabel(partido) || '1T';
+    const label = obtenerPeriodoLabel(partido, seg) || '1T';
     const timeStr = formatearTiempo(seg);
     const timerSpan = document.getElementById('timer-' + pid);
     if (timerSpan) timerSpan.textContent = timeStr;
@@ -2226,6 +2224,18 @@ function actualizarDisplayTimer(pid, seg, partido) {
     const veedorPeriod = document.getElementById('veedor-period-display');
     if (veedorTimer) veedorTimer.textContent = timeStr;
     if (veedorPeriod) veedorPeriod.textContent = label;
+    // Actualizar tiempo adicional
+    var extra = obtenerTiempoAdicional(partido, seg);
+    var extraSpan = document.getElementById('extra-' + pid);
+    if (extraSpan) {
+        if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
+        else { extraSpan.style.display = 'none'; }
+    }
+    var veedorExtra = document.getElementById('veedor-extra-display');
+    if (veedorExtra) {
+        if (extra > 0) { veedorExtra.textContent = '+' + formatearTiempo(extra); veedorExtra.style.display = 'inline'; }
+        else { veedorExtra.style.display = 'none'; }
+    }
 }
 
 // Fallback global timer: actualiza el timer del Veedor usando los datos del timerTick o Supabase
@@ -2246,10 +2256,15 @@ setInterval(function() {
             } else {
                 t = obtenerTiempoActual(p);
             }
-            var displayT = p.periodo === 'segundo_tiempo' ? (t - (p.tiempo_1t || 0)) : t;
-            var timeStr = formatearTiempo(Math.max(0, displayT));
+            var timeStr = formatearTiempo(Math.max(0, t));
             if (veedorTimer.textContent !== timeStr) veedorTimer.textContent = timeStr;
-            if (veedorPeriod) veedorPeriod.textContent = obtenerPeriodoLabel(p);
+            if (veedorPeriod) veedorPeriod.textContent = obtenerPeriodoLabel(p, t);
+            var extraSpan = document.getElementById('veedor-extra-display');
+            var extra = obtenerTiempoAdicional(p, t);
+            if (extraSpan) {
+                if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
+                else { extraSpan.style.display = 'none'; }
+            }
         }
     } catch(e) {}
 }, 500);
@@ -2283,22 +2298,30 @@ setInterval(function() {
         } else {
             t = obtenerTiempoActual(p);
         }
-        var displayT = p.periodo === 'segundo_tiempo' ? (t - (p.tiempo_1t || 0)) : t;
-        timerSpan.textContent = formatearTiempo(Math.max(0, displayT));
-        if (periodSpan) periodSpan.textContent = obtenerPeriodoLabel(p);
+        timerSpan.textContent = formatearTiempo(Math.max(0, t));
+        if (periodSpan) periodSpan.textContent = obtenerPeriodoLabel(p, t);
+        var extraSpan = document.getElementById('extra-' + pid);
+        var extra = obtenerTiempoAdicional(p, t);
+        if (extraSpan) {
+            if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
+            else { extraSpan.style.display = 'none'; }
+        }
     }
     // Auto-actualizar minuto del Veedor
     var minInput = document.getElementById('veedor-evento-minuto');
     if (minInput && _veedorPartidoActual) {
         var pidV = _veedorPartidoActual.id;
-        var tickV = _timerTicks[pidV];
-        if (tickV && tickV.data && tickV.data.en_curso) {
-            var tickP = tickV.data;
-            var tt = (tickP.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tickV.inicioLocal) / 1000));
-            if (tickP.periodo === 'segundo_tiempo') tt -= (tickP.tiempo_1t || 0);
-            var mins = Math.floor(Math.max(0, tt) / 60);
-            if (parseInt(minInput.value) !== mins) minInput.value = mins;
+        var mins = _ultimoMinutoPartido[pidV];
+        if (mins === undefined) {
+            var tickV = _timerTicks[pidV];
+            if (tickV && tickV.data && tickV.data.en_curso) {
+                var tickP = tickV.data;
+                var tt = (tickP.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tickV.inicioLocal) / 1000));
+                if (tickP.periodo === 'segundo_tiempo') tt -= (tickP.tiempo_1t || 0);
+                mins = Math.floor(Math.max(0, tt) / 60);
+            }
         }
+        if (mins !== undefined && parseInt(minInput.value) !== mins) minInput.value = mins;
     }
 }, 1000);
 
@@ -2330,9 +2353,11 @@ async function pausarPartido(id, partido) {
         inicio_periodo: null
     }).eq('id', id);
     if (error) return alert('Error al pausar: ' + error.message);
+    // Guardar el minuto actual antes de detener el timer
+    _ultimoMinutoPartido[id] = Math.floor(Math.max(0, nuevoTiempo - (partido.tiempo_1t || 0)) / 60);
     detenerTimerPartido(id);
     await cargarPartidosAdmin();
-    cargarEstadisticas();
+    await cargarEstadisticas();
 }
 
 async function reanudarPartido(id, destino) {
@@ -2355,9 +2380,10 @@ async function reanudarPartido(id, destino) {
         inicio_periodo: new Date().toISOString()
     }).eq('id', id);
     if (error) return alert('Error: ' + error.message);
+    delete _ultimoMinutoPartido[id];
     arrancarTimerPartido(id);
     await cargarPartidosAdmin();
-    cargarEstadisticas();
+    await cargarEstadisticas();
 }
 
 async function agregarTiempoAdicional(id) {
@@ -2578,7 +2604,7 @@ async function cargarEventosEnVivo() {
         }
 
         var tiempo = obtenerTiempoDisplay(p);
-        var periodLabel = obtenerPeriodoLabel(p);
+        var periodLabel = obtenerPeriodoLabel(p, tiempo);
         var cronoDisplay = p.en_curso || p.tiempo_jugado > 0 ? formatearTiempo(tiempo) : '';
         var periodDisplay = p.en_curso || p.tiempo_jugado > 0 ? periodLabel : '';
         var isLive = p.en_curso || (p.tiempo_jugado || 0) > 0;
@@ -2597,7 +2623,10 @@ async function cargarEventosEnVivo() {
             '<span style="font-size:14px;font-weight:700;color:var(--text-muted);">-</span>' +
             '<span style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">' + golesB + '</span>' +
             '</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;">' +
             '<span id="timer-' + p.id + '" style="font-size:22px;font-weight:800;font-family:monospace;color:white;letter-spacing:2px;">' + cronoDisplay + '</span>' +
+            '<span id="extra-' + p.id + '" style="font-size:13px;font-weight:700;font-family:monospace;color:#f59e0b;display:none;">+00:00</span>' +
+            '</div>' +
             '<span id="period-' + p.id + '" style="font-size:10px;font-weight:700;color:rgba(16,185,129,0.8);text-transform:uppercase;letter-spacing:1px;">' + periodDisplay + '</span>' +
             '</div>' +
             '<div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">' +
