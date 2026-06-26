@@ -1,4 +1,4 @@
-const CACHE = 'afemec-v1';
+const CACHE = 'afemec-v2';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -7,7 +7,7 @@ self.addEventListener('install', e => {
         '.',
         './index.html',
         './style.css',
-        './app.js?v=9',
+        './app.js?v=10',
         './logo2.png',
         'https://unpkg.com/lucide@latest',
         'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
@@ -46,8 +46,8 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network-first para JS (siempre última versión en desarrollo)
-  if (req.url.indexOf('/app.js') !== -1 || req.url.indexOf('/sw.js') !== -1) {
+  // Network-first para JS y CSS (siempre última versión en desarrollo)
+  if (req.url.indexOf('/app.js') !== -1 || req.url.indexOf('/sw.js') !== -1 || req.url.indexOf('/style.css') !== -1) {
     e.respondWith(
       fetch(req).then(function(fetchRes) {
         var copy = fetchRes.clone();
@@ -60,7 +60,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Cache-first para el resto (CSS, imágenes, CDN)
+  // Cache-first para el resto (imágenes, CDN)
   e.respondWith(
     caches.match(req).then(function(res) {
       return res || fetch(req).then(function(fetchRes) {

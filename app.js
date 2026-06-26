@@ -2092,10 +2092,12 @@ async function asegurarDatosReferencia() {
     }
 }
 
-function formatearTiempo(seg) {
+function formatearTiempo(seg, cs) {
     const m = Math.floor(seg / 60);
-    const s = seg % 60;
-    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    const s = Math.floor(seg % 60);
+    var base = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    if (cs !== undefined) base += '.' + String(cs).padStart(2,'0');
+    return base;
 }
 
 function obtenerPeriodoLabel(p, t) {
@@ -2156,18 +2158,22 @@ function arrancarTimerPartido(pid) {
             if (!tick || !tick.data) return;
             var p = tick.data;
 
-            // Calcular tiempo: base (incluye lo jugado + lo transcurrido desde inicio_periodo) + transcurrido desde inicioLocal
-            var transcurrido = Math.floor((Date.now() - tick.inicioLocal) / 1000);
-            var t = tick.tiempoJugadoLocal + Math.max(0, transcurrido);
+            var elapsedMs = Date.now() - tick.inicioLocal;
+            var totalMs = tick.tiempoJugadoLocal * 1000 + elapsedMs;
+            var t = Math.floor(totalMs / 1000);
+            var cs = Math.floor((totalMs % 1000) / 10);
             // Re-sincronizar cada 30s con Supabase
-            if (transcurrido > 0 && transcurrido % 30 === 0) {
+            var transcurrido = Math.floor(elapsedMs / 1000);
+            if (transcurrido > 0 && transcurrido % 30 === 0 && tick._syncing !== true) {
+                tick._syncing = true;
                 supabaseClient.from('partidos').select('*').eq('id', pid).single().then(function(res2) {
                     if (res2.data && !res2.data.finalizado && res2.data.en_curso) {
                         tick.data = res2.data;
                         tick.inicioLocal = Date.now();
                         tick.tiempoJugadoLocal = obtenerTiempoActual(res2.data);
                     }
-                }).catch(function(){});
+                    tick._syncing = false;
+                }).catch(function(){ tick._syncing = false; });
             }
 
             var extraTarget = _extraTargets[pid];
@@ -2189,13 +2195,13 @@ function arrancarTimerPartido(pid) {
                 return;
             }
 
-            actualizarDisplayTimer(pid, t, p);
+            actualizarDisplayTimer(pid, t, p, cs);
             if (_veedorPartidoActual && _veedorPartidoActual.id == pid && p.periodo === 'segundo_tiempo' && p.en_curso) {
                 var fb2 = document.getElementById('veedor-btn-finalizar');
                 if (fb2) fb2.style.display = 'inline-block';
             }
         } catch(e) {}
-    }, 1000);
+    }, 50);
 
     // Refrescar eventos cada 5s
     _timerTicks[pid].refresh = setInterval(function() {
@@ -2213,9 +2219,9 @@ function detenerTimerPartido(pid) {
     delete _timerTicks[pid];
 }
 
-function actualizarDisplayTimer(pid, seg, partido) {
+function actualizarDisplayTimer(pid, seg, partido, cs) {
     const label = obtenerPeriodoLabel(partido, seg) || '1T';
-    const timeStr = formatearTiempo(seg);
+    const timeStr = formatearTiempo(seg, cs);
     const timerSpan = document.getElementById('timer-' + pid);
     if (timerSpan) timerSpan.textContent = timeStr;
     const periodSpan = document.getElementById('period-' + pid);
@@ -2224,7 +2230,6 @@ function actualizarDisplayTimer(pid, seg, partido) {
     const veedorPeriod = document.getElementById('veedor-period-display');
     if (veedorTimer) veedorTimer.textContent = timeStr;
     if (veedorPeriod) veedorPeriod.textContent = label;
-    // Actualizar tiempo adicional
     var extra = obtenerTiempoAdicional(partido, seg);
     var extraSpan = document.getElementById('extra-' + pid);
     if (extraSpan) {
@@ -2238,38 +2243,8 @@ function actualizarDisplayTimer(pid, seg, partido) {
     }
 }
 
-// Fallback global timer: actualiza el timer del Veedor usando los datos del timerTick o Supabase
 var _fallbackTimerData = null;
-setInterval(function() {
-    var veedorTimer = document.getElementById('veedor-timer-display');
-    var veedorPeriod = document.getElementById('veedor-period-display');
-    if (!veedorTimer) return;
-    var pidVeedor = _veedorPartidoActual ? _veedorPartidoActual.id : null;
-    if (!pidVeedor) return;
-    try {
-        var tick = _timerTicks[pidVeedor];
-        var p = tick ? tick.data : _fallbackTimerData;
-        if (p && p.en_curso) {
-            var t;
-            if (tick && tick.inicioLocal) {
-                t = tick.tiempoJugadoLocal + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
-            } else {
-                t = obtenerTiempoActual(p);
-            }
-            var timeStr = formatearTiempo(Math.max(0, t));
-            if (veedorTimer.textContent !== timeStr) veedorTimer.textContent = timeStr;
-            if (veedorPeriod) veedorPeriod.textContent = obtenerPeriodoLabel(p, t);
-            var extraSpan = document.getElementById('veedor-extra-display');
-            var extra = obtenerTiempoAdicional(p, t);
-            if (extraSpan) {
-                if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
-                else { extraSpan.style.display = 'none'; }
-            }
-        }
-    } catch(e) {}
-}, 500);
-
-// Recargar datos del Veedor cada 5s para mantener timer preciso
+// Sincronizar datos del Veedor con DB cada 5s
 setInterval(async function() {
     var pid = _veedorPartidoActual ? _veedorPartidoActual.id : null;
     if (!pid) return;
@@ -2279,50 +2254,21 @@ setInterval(async function() {
     } catch(e) {}
 }, 5000);
 
-// Actualizar timers en vivo cada 1s para Estadísticas
+// Auto-actualizar minuto del input del Veedor cada 1s
 setInterval(function() {
-    var cards = document.querySelectorAll('#est-en-vivo-list > div[data-pid]');
-    for (var ci = 0; ci < cards.length; ci++) {
-        var card = cards[ci];
-        var pid = parseInt(card.getAttribute('data-pid'));
-        if (!pid) continue;
-        var timerSpan = document.getElementById('timer-' + pid);
-        var periodSpan = document.getElementById('period-' + pid);
-        if (!timerSpan) continue;
-        var tick = _timerTicks[pid];
-        var p = tick ? tick.data : null;
-        if (!p || !p.en_curso) continue;
-        var t;
-        if (tick && tick.inicioLocal) {
-            t = tick.tiempoJugadoLocal + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
-        } else {
-            t = obtenerTiempoActual(p);
-        }
-        timerSpan.textContent = formatearTiempo(Math.max(0, t));
-        if (periodSpan) periodSpan.textContent = obtenerPeriodoLabel(p, t);
-        var extraSpan = document.getElementById('extra-' + pid);
-        var extra = obtenerTiempoAdicional(p, t);
-        if (extraSpan) {
-            if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
-            else { extraSpan.style.display = 'none'; }
-        }
-    }
-    // Auto-actualizar minuto del Veedor
     var minInput = document.getElementById('veedor-evento-minuto');
-    if (minInput && _veedorPartidoActual) {
-        var pidV = _veedorPartidoActual.id;
-        var mins = _ultimoMinutoPartido[pidV];
-        if (mins === undefined) {
-            var tickV = _timerTicks[pidV];
-            if (tickV && tickV.data && tickV.data.en_curso) {
-                var tickP = tickV.data;
-                var tt = (tickP.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tickV.inicioLocal) / 1000));
-                if (tickP.periodo === 'segundo_tiempo') tt -= (tickP.tiempo_1t || 0);
-                mins = Math.floor(Math.max(0, tt) / 60);
-            }
+    if (!minInput || !_veedorPartidoActual) return;
+    var pidV = _veedorPartidoActual.id;
+    var mins = _ultimoMinutoPartido[pidV];
+    if (mins === undefined) {
+        var tickV = _timerTicks[pidV];
+        if (tickV && tickV.data && tickV.data.en_curso) {
+            var elapsedMs = Date.now() - tickV.inicioLocal;
+            var totalMs = tickV.tiempoJugadoLocal * 1000 + elapsedMs;
+            mins = Math.floor(Math.max(0, totalMs / 1000) / 60);
         }
-        if (mins !== undefined && parseInt(minInput.value) !== mins) minInput.value = mins;
     }
+    if (mins !== undefined && parseInt(minInput.value) !== mins) minInput.value = mins;
 }, 1000);
 
 async function iniciarPartido(id) {
@@ -2353,8 +2299,13 @@ async function pausarPartido(id, partido) {
         inicio_periodo: null
     }).eq('id', id);
     if (error) return alert('Error al pausar: ' + error.message);
-    // Guardar el minuto actual antes de detener el timer
-    _ultimoMinutoPartido[id] = Math.floor(Math.max(0, nuevoTiempo - (partido.tiempo_1t || 0)) / 60);
+    _ultimoMinutoPartido[id] = Math.floor(Math.max(0, nuevoTiempo) / 60);
+    // Actualizar fallback inmediatamente para que ningún timer residual siga corriendo
+    if (_fallbackTimerData && String(_fallbackTimerData.id) === String(id)) {
+        _fallbackTimerData.en_curso = false;
+        _fallbackTimerData.tiempo_jugado = nuevoTiempo;
+        _fallbackTimerData.inicio_periodo = null;
+    }
     detenerTimerPartido(id);
     await cargarPartidosAdmin();
     await cargarEstadisticas();
@@ -3294,4 +3245,78 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         document.getElementById('nav-login').style.display = 'block';
     }
+});
+
+// --- Animated Grass Overlay ---
+document.addEventListener('DOMContentLoaded', function() {
+    var grassCanvas = document.createElement('canvas');
+    grassCanvas.id = 'grass-canvas';
+    grassCanvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:-2;pointer-events:none;';
+    document.body.insertBefore(grassCanvas, document.body.firstChild);
+
+    var gctx = grassCanvas.getContext('2d');
+    var blades = [];
+    var gMouseX = -9999, gMouseY = -9999;
+    var gW, gH;
+
+    function resizeGrass() {
+        gW = grassCanvas.width = window.innerWidth;
+        gH = grassCanvas.height = window.innerHeight;
+        initBlades();
+    }
+
+    function initBlades() {
+        blades = [];
+        var count = Math.min(1200, Math.max(200, Math.floor(gW * 0.6)));
+        for (var i = 0; i < count; i++) {
+            blades.push({
+                x: Math.random() * gW,
+                y: gH * 0.3 + Math.random() * gH * 0.7,
+                h: 8 + Math.random() * 45,
+                phase: Math.random() * Math.PI * 2,
+                speed: 0.15 + Math.random() * 0.5,
+                w: 0.8 + Math.random() * 3,
+                hue: 90 + Math.random() * 55,
+                sat: 25 + Math.random() * 40,
+                lig: 20 + Math.random() * 32,
+                alpha: 0.15 + Math.random() * 0.35,
+                baseSway: 1.5 + Math.random() * 4
+            });
+        }
+    }
+
+    function drawGrass(time) {
+        gctx.clearRect(0, 0, gW, gH);
+        var t = time / 1000;
+        for (var i = 0; i < blades.length; i++) {
+            var b = blades[i];
+            var wind = Math.sin(t * b.speed + b.phase) * b.baseSway;
+            var dx = gMouseX - b.x;
+            var dy = gMouseY - (b.y - b.h * 0.5);
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            var mouseForce = Math.max(0, 1 - dist / 180) * 14;
+            var totalSway = wind + mouseForce;
+            gctx.beginPath();
+            gctx.moveTo(b.x, b.y);
+            gctx.quadraticCurveTo(b.x + totalSway * 0.3, b.y - b.h * 0.6, b.x + totalSway, b.y - b.h);
+            gctx.strokeStyle = 'hsla(' + b.hue + ',' + b.sat + '%,' + b.lig + '%,' + b.alpha + ')';
+            gctx.lineWidth = b.w;
+            gctx.lineCap = 'round';
+            gctx.stroke();
+        }
+    }
+
+    function loopGrass(time) {
+        drawGrass(time);
+        requestAnimationFrame(loopGrass);
+    }
+
+    document.addEventListener('mousemove', function(e) {
+        gMouseX = e.clientX;
+        gMouseY = e.clientY;
+    });
+
+    window.addEventListener('resize', resizeGrass);
+    resizeGrass();
+    requestAnimationFrame(loopGrass);
 });
