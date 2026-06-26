@@ -102,18 +102,23 @@ function iniciarRealtimeEstadisticas() {
                                             var nomB = eqB ? eqB.nombre : '?';
                                             var equipoJugador = String(ev.equipo_id) === String(p.equipo_a_id) ? nomA : nomB;
                                             var rival = String(ev.equipo_id) === String(p.equipo_a_id) ? nomB : nomA;
-                                                mostrarAnimacionGol(ev.partido_id, ev.jugador_nombre, equipoJugador, rival, ev.minuto);
+                                            mostrarAnimacionGol(ev.partido_id, ev.jugador_nombre, equipoJugador, rival, ev.minuto);
                                         }
                                     } catch(e) { console.warn('Goal anim error:', e); }
+                                    setTimeout(function() { programarRefreshEstadisticas(); }, 3500);
                                 })();
+                            } else {
+                                programarRefreshEstadisticas();
                             }
+                        } else {
+                            programarRefreshEstadisticas();
                         }
                     } catch(e) { console.warn('Goal handler error:', e); }
-                    programarRefreshEstadisticas();
+
                 }
             )
             .on('postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'partidos', filter: 'finalizado=eq.true' },
+                { event: 'UPDATE', schema: 'public', table: 'partidos' },
                 function() { programarRefreshEstadisticas(); }
             )
             .subscribe();
@@ -140,6 +145,9 @@ function showSection(id) {
 
     if (id === 'veedor') {
         veedorCargarPartidos();
+    }
+    if (id === 'programacion') {
+        cargarEstadisticas();
     }
     if (id === 'caja') {
         actualizarListaCobros();
@@ -1849,7 +1857,7 @@ async function veedorIniciarPartido() {
     const finalizar = document.getElementById('veedor-btn-finalizar');
     if (finalizar) finalizar.style.display = periodo === 'segundo_tiempo' ? 'inline-block' : 'none';
     await cargarPartidosAdmin();
-    cargarEstadisticas();
+    await cargarEstadisticas();
 }
 
 async function veedorFinalizarPartido() {
@@ -1949,8 +1957,24 @@ function renderPlantelEquipo(containerId, atletas, equipoId, eventos, titularesM
     });
 }
 
+function obtenerMinutoActual(partidoId) {
+    var tick = _timerTicks[partidoId];
+    if (tick && tick.data) {
+        var t;
+        if (tick.data.en_curso && tick.inicioLocal) {
+            t = tick.tiempoJugadoLocal + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
+        } else {
+            t = obtenerTiempoActual(tick.data);
+        }
+        if (tick.data.periodo === 'segundo_tiempo') t -= (tick.data.tiempo_1t || 0);
+        return Math.floor(Math.max(0, t) / 60);
+    }
+    var input = document.getElementById('veedor-evento-minuto');
+    return input ? (parseInt(input.value) || 0) : 0;
+}
+
 async function veedorRegistrarEvento(partidoId, equipoId, nombre, ci, tipo) {
-    const minuto = parseInt(document.getElementById('veedor-evento-minuto').value) || 0;
+    const minuto = obtenerMinutoActual(partidoId);
 
     // Auto-convertir 2da amarilla → roja
     let tipoFinal = tipo;
@@ -1969,7 +1993,7 @@ async function veedorRegistrarEvento(partidoId, equipoId, nombre, ci, tipo) {
 
     await agregarEventoPartido(partidoId, equipoId, tipoFinal, nombre, ci, minuto);
     
-    // Show goal celebration
+    // Show goal celebration - NO await after this (instant)
     if (tipo === 'gol') {
         try {
             var pRes = await supabaseClient.from('partidos').select('*').eq('id', partidoId).single();
@@ -1984,9 +2008,9 @@ async function veedorRegistrarEvento(partidoId, equipoId, nombre, ci, tipo) {
         } catch(e) {}
     }
     
-    // Refresh both teams and events
-    await veedorCargarEquipos();
-    await cargarEstadisticas();
+    // Refresh both teams and events - these can run in background
+    veedorCargarEquipos().catch(e => {});
+    cargarEstadisticas().catch(e => {});
 }
 
 async function veedorToggleTitular(partidoId, equipoId, nombre, ci, esTitular) {
@@ -2012,7 +2036,7 @@ async function veedorToggleTitular(partidoId, equipoId, nombre, ci, esTitular) {
 }
 
 async function veedorRegistrarCambio(partidoId, equipoId, nombre, ci, tipo) {
-    const minuto = parseInt(document.getElementById('veedor-evento-minuto').value) || 0;
+    const minuto = obtenerMinutoActual(partidoId);
     await supabaseClient.from('partido_eventos').insert({
         partido_id: parseInt(partidoId),
         equipo_id: equipoId,
@@ -2114,7 +2138,7 @@ function arrancarTimerPartido(pid) {
                 }
                 _timerTicks[pid].data = d;
                 _timerTicks[pid].inicioLocal = Date.now();
-                _timerTicks[pid].tiempoJugadoLocal = d.tiempo_jugado || 0;
+                _timerTicks[pid].tiempoJugadoLocal = obtenerTiempoActual(d);
             } catch(e) {
                 detenerTimerPartido(pid);
             }
@@ -2127,15 +2151,16 @@ function arrancarTimerPartido(pid) {
             if (!tick || !tick.data) return;
             var p = tick.data;
 
-            // Calcular tiempo: jugado + transcurrido desde inicioLocal
+            // Calcular tiempo: base (incluye lo jugado + lo transcurrido desde inicio_periodo) + transcurrido desde inicioLocal
             var transcurrido = Math.floor((Date.now() - tick.inicioLocal) / 1000);
-            var t = (p.tiempo_jugado || 0) + Math.max(0, transcurrido);
+            var t = tick.tiempoJugadoLocal + Math.max(0, transcurrido);
             // Re-sincronizar cada 30s con Supabase
             if (transcurrido > 0 && transcurrido % 30 === 0) {
                 supabaseClient.from('partidos').select('*').eq('id', pid).single().then(function(res2) {
                     if (res2.data && !res2.data.finalizado && res2.data.en_curso) {
                         tick.data = res2.data;
                         tick.inicioLocal = Date.now();
+                        tick.tiempoJugadoLocal = obtenerTiempoActual(res2.data);
                     }
                 }).catch(function(){});
             }
@@ -2177,7 +2202,6 @@ function arrancarTimerPartido(pid) {
     _timerTicks[pid].refresh = setInterval(function() {
         try {
             if (typeof veedorRecargarEventos === 'function') veedorRecargarEventos();
-            if (typeof cargarEventosEnVivo === 'function') cargarEventosEnVivo();
         } catch(e) {}
     }, 5000);
 }
@@ -2187,16 +2211,17 @@ function detenerTimerPartido(pid) {
     if (!tick) return;
     clearInterval(tick.interval);
     if (tick.refresh) clearInterval(tick.refresh);
-    delete _timerTicks[pid];
+    tick.interval = null;
+    tick.refresh = null;
 }
 
 function actualizarDisplayTimer(pid, seg, partido) {
     const label = obtenerPeriodoLabel(partido) || '1T';
     const timeStr = formatearTiempo(seg);
-    const timerSpan = document.getElementById(`timer-${pid}`);
-    if (timerSpan) {
-        timerSpan.textContent = timeStr;
-    }
+    const timerSpan = document.getElementById('timer-' + pid);
+    if (timerSpan) timerSpan.textContent = timeStr;
+    const periodSpan = document.getElementById('period-' + pid);
+    if (periodSpan) periodSpan.textContent = label;
     const veedorTimer = document.getElementById('veedor-timer-display');
     const veedorPeriod = document.getElementById('veedor-period-display');
     if (veedorTimer) veedorTimer.textContent = timeStr;
@@ -2217,7 +2242,7 @@ setInterval(function() {
         if (p && p.en_curso) {
             var t;
             if (tick && tick.inicioLocal) {
-                t = (p.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
+                t = tick.tiempoJugadoLocal + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
             } else {
                 t = obtenerTiempoActual(p);
             }
@@ -2246,22 +2271,34 @@ setInterval(function() {
         var card = cards[ci];
         var pid = parseInt(card.getAttribute('data-pid'));
         if (!pid) continue;
+        var timerSpan = document.getElementById('timer-' + pid);
+        var periodSpan = document.getElementById('period-' + pid);
+        if (!timerSpan) continue;
         var tick = _timerTicks[pid];
-        var p = tick ? tick.data : _fallbackTimerData;
-        // Si no hay datos en el tick, intentar obtener de _fallbackTimerData (se actualiza cada 5s)
+        var p = tick ? tick.data : null;
         if (!p || !p.en_curso) continue;
         var t;
         if (tick && tick.inicioLocal) {
-            t = (p.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
+            t = tick.tiempoJugadoLocal + Math.max(0, Math.floor((Date.now() - tick.inicioLocal) / 1000));
         } else {
             t = obtenerTiempoActual(p);
         }
         var displayT = p.periodo === 'segundo_tiempo' ? (t - (p.tiempo_1t || 0)) : t;
-        var timeStr = formatearTiempo(Math.max(0, displayT));
-        var timerSpan = card.querySelector('.envivo-timer');
-        if (timerSpan) timerSpan.textContent = timeStr;
-        var periodSpan = card.querySelector('.envivo-period');
+        timerSpan.textContent = formatearTiempo(Math.max(0, displayT));
         if (periodSpan) periodSpan.textContent = obtenerPeriodoLabel(p);
+    }
+    // Auto-actualizar minuto del Veedor
+    var minInput = document.getElementById('veedor-evento-minuto');
+    if (minInput && _veedorPartidoActual) {
+        var pidV = _veedorPartidoActual.id;
+        var tickV = _timerTicks[pidV];
+        if (tickV && tickV.data && tickV.data.en_curso) {
+            var tickP = tickV.data;
+            var tt = (tickP.tiempo_jugado || 0) + Math.max(0, Math.floor((Date.now() - tickV.inicioLocal) / 1000));
+            if (tickP.periodo === 'segundo_tiempo') tt -= (tickP.tiempo_1t || 0);
+            var mins = Math.floor(Math.max(0, tt) / 60);
+            if (parseInt(minInput.value) !== mins) minInput.value = mins;
+        }
     }
 }, 1000);
 
@@ -2354,41 +2391,71 @@ function programarRefreshEstadisticas() {
 }
 
 function mostrarAnimacionGol(partidoId, jugador, equipo, rival, minuto) {
+    // Buscar el marcador (goal-anchor) dentro del Veedor o la tarjeta En Vivo
     var target = null;
     if (_veedorPartidoActual && String(_veedorPartidoActual.id) === String(partidoId)) {
-        target = document.getElementById('veedor-timer-bar');
+        var bar = document.getElementById('veedor-timer-bar');
+        if (bar) {
+            var anchor = bar.querySelector('.goal-anchor');
+            target = anchor || bar;
+        }
     }
     if (!target) {
-        var cards = document.querySelectorAll('#est-en-vivo-list > div');
-        for (var ci = 0; ci < cards.length; ci++) {
-            var card = cards[ci];
-            if (card.getAttribute('data-pid') === String(partidoId)) {
-                target = card.querySelector('.goal-anchor');
-                if (!target) target = card;
+        var cards = document.querySelectorAll('#est-en-vivo-list [data-pid]');
+        for (var i = 0; i < cards.length; i++) {
+            if (String(cards[i].getAttribute('data-pid')) === String(partidoId)) {
+                var anchor = cards[i].querySelector('.goal-anchor');
+                target = anchor || cards[i];
                 break;
             }
         }
-        if (!target) return;
     }
+    if (!target) return;
+
+    // Limpiar animación previa en este marcador
+    var old = target.querySelector('.goal-badge-fifa');
+    if (old && old.parentNode) old.removeChild(old);
 
     var badge = document.createElement('div');
-    badge.textContent = 'GOOOOL!';
-    badge.style.cssText = 'position:absolute;z-index:100;font-weight:900;color:#10b981;background:rgba(0,0,0,0.9);padding:3px 10px;border-radius:6px;border:2px solid #10b981;box-shadow:0 0 15px rgba(16,185,129,0.5);animation:goalSlideIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards,goalPulse 0.6s ease-in-out infinite alternate,goalColor 1.5s ease-in-out infinite;pointer-events:none;text-shadow:0 0 8px rgba(16,185,129,0.8);font-size:clamp(14px,2.5vw,22px);line-height:1;';
+    badge.className = 'goal-badge-fifa';
+    badge.textContent = '¡GOOOL!';
+    badge.style.cssText = 'position:absolute;z-index:100;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:900;color:#10b981;text-shadow:0 0 30px rgba(16,185,129,0.9);white-space:nowrap;pointer-events:none;line-height:1;';
 
-    // Posicionar: sobre el score central
-    var scoreEl = target.querySelector('.goal-anchor') || target;
-    var rect = scoreEl.getBoundingClientRect();
-    var parentRect = (target.offsetParent || document.body).getBoundingClientRect();
-    badge.style.top = '-12px';
-    badge.style.left = '50%';
-    badge.style.transform = 'translateX(-50%)';
+    // Tamaño relativo al marcador: usar la altura del target
+    var h = target.offsetHeight || 40;
+    var fs = Math.max(14, Math.round(h * 0.6));
+    badge.style.fontSize = fs + 'px';
 
     target.style.position = 'relative';
+    target.style.overflow = 'visible';
     target.appendChild(badge);
 
-    setTimeout(function() {
-        if (badge.parentNode) badge.remove();
-    }, 3000);
+    // Animación con requestAnimationFrame: 3s, sale a la izquierda
+    var start = performance.now();
+    var w = target.offsetWidth || 200;
+    function anim(t) {
+        var e = (t - start) / 1000;
+        if (e > 3) {
+            if (badge.parentNode) badge.parentNode.removeChild(badge);
+            return;
+        }
+        if (e < 0.35) {
+            var p = e / 0.35;
+            var s = 0.3 + 0.7 * (1 - Math.pow(1 - p, 3));
+            badge.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+            badge.style.opacity = '1';
+        } else if (e < 2.5) {
+            var pu = 1 + 0.05 * Math.sin((e - 0.35) * 7);
+            badge.style.transform = 'translate(-50%,-50%) scale(' + pu + ')';
+            badge.style.opacity = '1';
+        } else {
+            var p2 = (e - 2.5) / 0.5;
+            badge.style.transform = 'translate(calc(-50% - ' + (p2 * w * 1.5) + 'px),-50%) scale(0.9)';
+            badge.style.opacity = '' + (1 - p2);
+        }
+        requestAnimationFrame(anim);
+    }
+    requestAnimationFrame(anim);
 }
 
 async function cargarEstadisticas() {
@@ -2517,29 +2584,32 @@ async function cargarEventosEnVivo() {
         var isLive = p.en_curso || (p.tiempo_jugado || 0) > 0;
         var catNombre = p.categoria_id ? ((categoriasConfig.find(function(c) { return c.id === p.categoria_id; }) || {}).nombre || '') : '';
 
-        var logoA = eqA.logo_url ? '<img src="' + escHtml(eqA.logo_url) + '" style="width:20px;height:20px;object-fit:contain;border-radius:4px;vertical-align:middle;" onerror="this.style.display=\'none\'"> ' : '';
-        var logoB = eqB.logo_url ? '<img src="' + escHtml(eqB.logo_url) + '" style="width:20px;height:20px;object-fit:contain;border-radius:4px;vertical-align:middle;" onerror="this.style.display=\'none\'"> ' : '';
+        var logoA = eqA.logo_url ? '<img src="' + escHtml(eqA.logo_url) + '" style="width:36px;height:36px;object-fit:contain;border-radius:6px;" onerror="this.style.display=\'none\'">' : '';
+        var logoB = eqB.logo_url ? '<img src="' + escHtml(eqB.logo_url) + '" style="width:36px;height:36px;object-fit:contain;border-radius:6px;" onerror="this.style.display=\'none\'">' : '';
 
-        evHtml += '<div data-pid="' + p.id + '" style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:12px;margin-bottom:14px;overflow:hidden;position:relative;">' +
-            '<div style="padding:16px;">' +
-            '<div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">' +
-            '<div style="flex:1;text-align:right;min-width:70px;display:flex;align-items:center;justify-content:flex-end;gap:6px;">' + logoA + '<strong style="font-size:14px;color:white;">' + escHtml(eqA.nombre) + '</strong></div>' +
-            '<div class="goal-anchor" style="display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.35);padding:4px 14px;border-radius:6px;position:relative;">' +
-            '<span style="font-size:28px;font-weight:900;color:' + (golesA > golesB ? 'var(--accent-color)' : 'white') + ';">' + golesA + '</span>' +
-            '<span style="font-size:13px;font-weight:700;color:var(--text-muted);">-</span>' +
-            '<span style="font-size:28px;font-weight:900;color:' + (golesB > golesA ? 'var(--accent-color)' : 'white') + ';">' + golesB + '</span>' +
+        evHtml += '<div data-pid="' + p.id + '" style="margin-bottom:14px;position:relative;">' +
+            '<div style="display:flex;align-items:stretch;justify-content:center;font-family:var(--font-heading);">' +
+            '<div style="display:grid;grid-template-columns:1fr auto 1fr;width:100%;max-width:500px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;">' +
+            '<div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">' + logoA + '<span style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">' + escHtml(eqA.nombre) + '</span></div>' +
+            '<div class="goal-anchor" style="display:flex;flex-direction:column;align-items:center;padding:6px 16px;background:rgba(0,0,0,0.3);min-width:120px;position:relative;">' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">' + golesA + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:var(--text-muted);">-</span>' +
+            '<span style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">' + golesB + '</span>' +
             '</div>' +
-            '<div style="flex:1;text-align:left;min-width:70px;display:flex;align-items:center;justify-content:flex-start;gap:6px;">' + logoB + '<strong style="font-size:14px;color:white;">' + escHtml(eqB.nombre) + '</strong></div>' +
+            '<span id="timer-' + p.id + '" style="font-size:22px;font-weight:800;font-family:monospace;color:white;letter-spacing:2px;">' + cronoDisplay + '</span>' +
+            '<span id="period-' + p.id + '" style="font-size:10px;font-weight:700;color:rgba(16,185,129,0.8);text-transform:uppercase;letter-spacing:1px;">' + periodDisplay + '</span>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);">' +
-            '' +
-            (cronoDisplay ? '<span class="envivo-timer" style="font-size:16px;font-weight:800;font-family:monospace;color:white;background:rgba(0,0,0,0.3);padding:1px 8px;border-radius:4px;">' + cronoDisplay + '</span>' : '') +
-            (periodDisplay ? '<span class="envivo-period" style="font-weight:700;text-transform:uppercase;">' + periodDisplay + '</span>' : '') +
+            '<div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">' +
+            '<span style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">' + escHtml(eqB.nombre) + '</span>' + logoB +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:3px 10px 5px;font-size:10px;color:var(--text-muted);background:rgba(0,0,0,0.08);border-radius:0 0 10px 10px;">' +
             '<span>' + escHtml(cancha.nombre) + '</span>' +
-            (catNombre ? '<span style="color:rgba(245,158,11,0.8);">' + escHtml(catNombre) + '</span>' : '') +
+            (catNombre ? '<span style="color:rgba(245,158,11,0.7);">' + escHtml(catNombre) + '</span>' : '') +
             '</div>' +
-            '</div>' +
-            (timelineHtml ? '<div style="padding:8px 16px 10px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.1);">' + timelineHtml + '</div>' : '') +
+            (timelineHtml ? '<div style="padding:6px 12px 10px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.08);">' + timelineHtml + '</div>' : '') +
             '</div>';
     }
     container.innerHTML = evHtml;
@@ -2678,33 +2748,35 @@ async function cargarEstadisticasYTabla() {
             golesHtml += '</div>';
         }
 
-        var logoAhtml = eqA.logo_url ? '<img src="' + escHtml(eqA.logo_url) + '" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" onerror="this.style.display=\'none\'">' : '';
-        var logoBhtml = eqB.logo_url ? '<img src="' + escHtml(eqB.logo_url) + '" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" onerror="this.style.display=\'none\'">' : '';
+        var logoAhtml = eqA.logo_url ? '<img src="' + escHtml(eqA.logo_url) + '" style="width:36px;height:36px;object-fit:contain;border-radius:6px;" onerror="this.style.display=\'none\'">' : '';
+        var logoBhtml = eqB.logo_url ? '<img src="' + escHtml(eqB.logo_url) + '" style="width:36px;height:36px;object-fit:contain;border-radius:6px;" onerror="this.style.display=\'none\'">' : '';
 
-        resultHtml += '<div style="background:rgba(0,0,0,0.2);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:12px;overflow:hidden;">' +
-            '<div style="background:linear-gradient(180deg,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.05) 100%);padding:14px 16px;">' +
-            '<div style="display:flex;align-items:center;justify-content:center;gap:8px;">' +
-            '<div style="flex:1;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:6px;">' +
+        resultHtml += '<div style="margin-bottom:12px;">' +
+            '<div style="display:flex;align-items:stretch;justify-content:center;font-family:var(--font-heading);">' +
+            '<div style="display:grid;grid-template-columns:1fr auto 1fr;width:100%;max-width:500px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;">' +
+            '<div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">' +
             logoAhtml +
-            '<span style="font-size:14px;font-weight:' + (eqAGanador ? '800' : '500') + ';color:' + (eqAGanador ? 'var(--accent-color)' : 'white') + ';">' + escHtml(eqA.nombre) + '</span>' +
+            '<span style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">' + escHtml(eqA.nombre) + '</span>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.3);padding:4px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);">' +
-            '<span style="font-size:28px;font-weight:900;color:' + (eqAGanador ? 'var(--accent-color)' : 'white') + ';line-height:1;">' + scoreA + '</span>' +
-            '<span style="font-size:13px;font-weight:700;color:var(--text-muted);">-</span>' +
-            '<span style="font-size:28px;font-weight:900;color:' + (eqBGanador ? 'var(--accent-color)' : 'white') + ';line-height:1;">' + scoreB + '</span>' +
+            '<div style="display:flex;flex-direction:column;align-items:center;padding:6px 16px;background:rgba(0,0,0,0.3);min-width:80px;">' +
+            '<div style="display:flex;align-items:center;gap:5px;">' +
+            '<span style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">' + scoreA + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:var(--text-muted);">-</span>' +
+            '<span style="font-size:30px;font-weight:900;color:var(--accent-color);line-height:1;">' + scoreB + '</span>' +
             '</div>' +
-            '<div style="flex:1;text-align:left;display:flex;align-items:center;gap:6px;">' +
+            '</div>' +
+            '<div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">' +
+            '<span style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">' + escHtml(eqB.nombre) + '</span>' +
             logoBhtml +
-            '<span style="font-size:14px;font-weight:' + (eqBGanador ? '800' : '500') + ';color:' + (eqBGanador ? 'var(--accent-color)' : 'white') + ';">' + escHtml(eqB.nombre) + '</span>' +
             '</div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;font-size:11px;color:var(--text-muted);">' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:3px 10px 5px;font-size:10px;color:var(--text-muted);background:rgba(0,0,0,0.08);border-radius:0 0 10px 10px;">' +
             '<span>' + fecha + '</span>' +
             '<span>' + escHtml(cancha.nombre) + '</span>' +
-            (p.categoria_id ? '<span style="color:rgba(245,158,11,0.7);background:rgba(245,158,11,0.08);padding:1px 6px;border-radius:3px;">' + escHtml((categoriasConfig.find(function(c) { return c.id === p.categoria_id; }) || {}).nombre || '') + '</span>' : '') +
+            (p.categoria_id ? '<span style="color:rgba(245,158,11,0.7);">' + escHtml((categoriasConfig.find(function(c) { return c.id === p.categoria_id; }) || {}).nombre || '') + '</span>' : '') +
             '</div>' +
-            '</div>' +
-            (golesHtml ? '<div style="padding:6px 16px 10px;border-top:1px solid rgba(255,255,255,0.04);background:rgba(0,0,0,0.05);">' + golesHtml + '</div>' : '') +
+            (golesHtml ? '<div style="padding:6px 12px 10px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.08);">' + golesHtml + '</div>' : '') +
             '</div>';
     }
     listRes.innerHTML = resultHtml;

@@ -110,8 +110,6 @@
         </div>
     </header>
 
-    <!-- Floating orientation toggle (app standalone only) -->
-    <button id="btn-orientacion" onclick="toggleOrientacion()" style="position:fixed;top:12px;right:12px;z-index:9998;background:rgba(185,28,28,0.85);backdrop-filter:blur(8px);border:1px solid var(--accent-color);color:white;width:44px;height:44px;border-radius:50%;cursor:pointer;font-size:18px;box-shadow:0 2px 12px rgba(0,0,0,0.4);" title="Modo Tableta">⟳</button>
 
     <main class="app-main">
 
@@ -578,7 +576,7 @@
                         <div style="display:grid;grid-template-columns:1fr auto 1fr;width:100%;max-width:500px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;">
                             <!-- Equipo A -->
                             <div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">
-                                <img id="veedor-logo-a" src="" style="width:18px;height:18px;object-fit:contain;border-radius:3px;display:none;" onerror="this.style.display='none'">
+                                <img id="veedor-logo-a" src="" style="width:36px;height:36px;object-fit:contain;border-radius:6px;display:none;" onerror="this.style.display='none'">
                                 <span id="veedor-nombre-a" style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">LOCAL</span>
                             </div>
                             <!-- Centro: Score + Timer -->
@@ -593,7 +591,7 @@
                             </div>
                             <!-- Equipo B -->
                             <div style="background:rgba(185,28,28,0.15);padding:8px 10px;display:flex;align-items:center;justify-content:center;gap:6px;">
-                                <img id="veedor-logo-b" src="" style="width:18px;height:18px;object-fit:contain;border-radius:3px;display:none;" onerror="this.style.display='none'">
+                                <img id="veedor-logo-b" src="" style="width:36px;height:36px;object-fit:contain;border-radius:6px;display:none;" onerror="this.style.display='none'">
                                 <span id="veedor-nombre-b" style="font-size:13px;font-weight:700;color:white;text-align:center;line-height:1.2;word-break:break-word;">VISITA</span>
                             </div>
                         </div>
@@ -789,37 +787,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js?v=9"></script>
 
-    <!-- Orientation Toggle -->
-    <script>
-    function toggleOrientacion() {
-        if (!screen.orientation) return;
-        var btn = document.getElementById('btn-orientacion');
-        if (screen.orientation.type && screen.orientation.type.startsWith('portrait')) {
-            screen.orientation.lock('landscape').then(function() {
-                if (btn) { btn.textContent = '⤢'; btn.title = 'Modo Retrato'; }
-            }).catch(function(e) { console.log('Ori lock:', e); });
-        } else {
-            screen.orientation.unlock();
-            if (btn) { btn.textContent = '⟳'; btn.title = 'Modo Tableta'; }
-        }
-    }
 
-    (function() {
-        function mostrarBoton() {
-            var btn = document.getElementById('btn-orientacion');
-            if (!btn) return;
-            var enApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-            btn.style.display = enApp ? 'flex' : 'none';
-        }
-        mostrarBoton();
-        window.addEventListener('load', mostrarBoton);
-        setTimeout(mostrarBoton, 2000);
-        setTimeout(mostrarBoton, 5000);
-        if (window.matchMedia) {
-            try { window.matchMedia('(display-mode: standalone)').addEventListener('change', mostrarBoton); } catch(e) {}
-        }
-    })();
-    </script>
 
     <!-- PWA Install Logic -->
     <script>

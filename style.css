@@ -1346,12 +1346,6 @@ footer.app-footer p {
 }
 
 /* Landscape phones */
-/* Botón orientación flotante (solo app standalone) */
-#btn-orientacion { display:none; transition: opacity 0.3s ease, transform 0.3s ease; opacity:0.9; }
-#btn-orientacion:hover { opacity:1; transform:scale(1.1); }
-#btn-orientacion:active { transform:scale(0.95); }
-
-
 /* Landscape: phones compactos */
 @media (max-height: 500px) and (orientation: landscape) {
     .app-header { top: 2px; margin: 4px 8px 0; }
