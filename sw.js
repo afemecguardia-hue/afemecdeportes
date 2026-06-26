@@ -31,18 +31,33 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   var req = e.request;
   if (req.method !== 'GET') return;
+
+  // Network-first for HTML (navegación) para recibir siempre la última versión
+  if (req.mode === 'navigate' || req.headers.get('Accept').includes('text/html')) {
+    e.respondWith(
+      fetch(req).then(function(fetchRes) {
+        var copy = fetchRes.clone();
+        caches.open(CACHE).then(function(cache) { cache.put(req, copy); });
+        return fetchRes;
+      }).catch(function() {
+        return caches.match(req).then(function(cacheRes) { return cacheRes || caches.match('./index.html'); });
+      })
+    );
+    return;
+  }
+
+  // Cache-first para el resto (CSS, JS, imágenes, CDN)
   e.respondWith(
-    caches.match(req).then(res => {
-      return res || fetch(req).then(fetchRes => {
+    caches.match(req).then(function(res) {
+      return res || fetch(req).then(function(fetchRes) {
         var url = req.url;
-        if (url.startsWith(self.location.origin) && url.indexOf('supabase') === -1) {
+        if ((url.startsWith(self.location.origin) && url.indexOf('supabase') === -1) || url.indexOf('cdn.') !== -1) {
           var copy = fetchRes.clone();
-          caches.open(CACHE).then(cache => cache.put(req, copy));
+          caches.open(CACHE).then(function(cache) { cache.put(req, copy); });
         }
         return fetchRes;
       });
     }).catch(function() {
-      if (req.mode === 'navigate') return caches.match('./index.html');
       return new Response('', { status: 503 });
     })
   );
