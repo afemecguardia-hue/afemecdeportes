@@ -35,9 +35,13 @@
         .info-item label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 4px; }
         .info-item span { font-weight: 600; color: white; }
         .btn-sm { padding: 0.35rem 0.75rem; font-size: 13px; }
-        .admin-tabs { display: flex; gap: 1px; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; border:1px solid rgba(255,255,255,0.06); }
+        .admin-tabs { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); border-radius: 8px; border:1px solid rgba(255,255,255,0.06); }
         .admin-tabs button { flex: 1; padding: 0.6rem; border: none; background: transparent; font-weight: 600; cursor: pointer; transition: .2s; color:rgba(255,255,255,0.6); }
         .admin-tabs button.active { background: rgba(245,158,11,0.15); color: var(--accent-color); }
+        @media (max-width: 768px) {
+            .admin-tabs { overflow-x: auto !important; flex-wrap: nowrap !important; -webkit-overflow-scrolling: touch; }
+            .admin-tabs button { flex: none !important; white-space: nowrap !important; }
+        }
         .admin-tab-content { display: none; }
         .admin-tab-content.active { display: block; }
         .flex-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
@@ -76,12 +80,15 @@
                 <div class="logo-wrapper">
                     <img src="logo2.png" alt="Logo AFEMEC" id="main-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     <div class="logo-fallback" style="display:none;"><i data-lucide="trophy"></i></div>
-                </div>
-                <div class="brand-text">
-                    <h1>AFEMEC</h1>
-                    <span class="badge-status">Gestión Deportiva</span>
-                </div>
             </div>
+            <div class="brand-text">
+                <h1>AFEMEC</h1>
+                <span class="badge-status">Gestión Deportiva</span>
+            </div>
+            <button id="hamburger-btn" onclick="toggleMobileMenu()" aria-label="Menú">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
 
             <nav class="main-nav">
                 <button onclick="showSection('registro')" class="nav-btn active" id="btn-registro">
@@ -107,6 +114,34 @@
                     <i data-lucide="log-out"></i><span>Salir</span>
                 </button>
             </nav>
+        </div>
+        <div id="mobile-menu-backdrop" onclick="toggleMobileMenu()"></div>
+        <div id="mobile-menu-drawer">
+            <button id="drawer-close" onclick="toggleMobileMenu()">✕</button>
+            <div class="drawer-nav">
+                <button onclick="showSection('registro');toggleMobileMenu()" class="drawer-btn active" id="drawer-registro">
+                    <i data-lucide="user-plus"></i><span>Inscripción</span>
+                </button>
+                <button id="drawer-admin" style="display:none;" onclick="showSection('admin');toggleMobileMenu()" class="drawer-btn drawer-role-admin">
+                    <i data-lucide="settings"></i><span>Admin</span>
+                </button>
+                <button id="drawer-veedor" style="display:none;" onclick="showSection('veedor');toggleMobileMenu()" class="drawer-btn drawer-role-veedor">
+                    <i data-lucide="shield-alert"></i><span>Veedor</span>
+                </button>
+                <button id="drawer-caja" style="display:none;" onclick="showSection('caja');toggleMobileMenu()" class="drawer-btn drawer-role-caja">
+                    <i data-lucide="wallet"></i><span>Caja</span>
+                </button>
+                <button onclick="showSection('programacion');toggleMobileMenu()" class="drawer-btn" id="drawer-programacion">
+                    <i data-lucide="bar-chart-3"></i><span>Estadísticas</span>
+                </button>
+                <div class="drawer-separator"></div>
+                <button id="drawer-login" onclick="showSection('login');toggleMobileMenu()" class="drawer-btn">
+                    <i data-lucide="log-in"></i><span>Ingresar</span>
+                </button>
+                <button id="drawer-logout" style="display:none;" onclick="logout();toggleMobileMenu()" class="drawer-btn">
+                    <i data-lucide="log-out"></i><span>Salir</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -225,7 +260,7 @@
                 <p>Gestión de socios, equipos, categorías, canchas y programación de partidos.</p>
             </div>
 
-            <div class="admin-tabs" style="flex-wrap: wrap;">
+            <div class="admin-tabs">
                 <button class="active" onclick="switchAdminTab('socios', this)">Socios</button>
                 <button onclick="switchAdminTab('equipos', this)">Equipos</button>
                 <button onclick="switchAdminTab('categorias', this)">Categorías</button>
@@ -234,6 +269,7 @@
                 <button onclick="switchAdminTab('partidos', this)">Partidos</button>
                 <button onclick="switchAdminTab('atletas', this)">Atletas</button>
                 <button onclick="switchAdminTab('busqueda', this)">Búsqueda por CI</button>
+                <button onclick="switchAdminTab('publicidad', this)">Publicidad</button>
             </div>
 
             <!-- TAB: SOCIOS -->
@@ -489,6 +525,62 @@
                     </div>
                 </div>
             </div>
+
+            <!-- TAB: PUBLICIDAD -->
+            <div id="admin-tab-publicidad" class="admin-tab-content">
+                <h3>Redes Sociales y Publicidad</h3>
+                <p style="color:var(--text-muted);font-size:14px;margin-bottom:1rem">Configurá los enlaces de redes sociales y los banners publicitarios laterales.</p>
+
+                <h4 style="font-size:14px;color:var(--accent-color);margin-bottom:0.6rem;">🌐 Redes Sociales</h4>
+                <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+                    <div class="form-group">
+                        <label style="color:#1877F2;font-weight:600;">Facebook URL</label>
+                        <input type="url" id="pub-facebook" class="form-input" placeholder="https://facebook.com/...">
+                    </div>
+                    <div class="form-group">
+                        <label style="color:#E4405F;font-weight:600;">Instagram URL</label>
+                        <input type="url" id="pub-instagram" class="form-input" placeholder="https://instagram.com/...">
+                    </div>
+                    <div class="form-group">
+                        <label style="color:#FF0000;font-weight:600;">YouTube URL</label>
+                        <input type="url" id="pub-youtube" class="form-input" placeholder="https://youtube.com/...">
+                    </div>
+                    <div class="form-group">
+                        <label style="color:var(--text-color);font-weight:600;">Sitio Web URL</label>
+                        <input type="url" id="pub-web" class="form-input" placeholder="https://...">
+                    </div>
+                </div>
+
+                <h4 style="font-size:14px;color:var(--accent-color);margin:1rem 0 0.6rem;">📺 Publicidad Lateral</h4>
+                <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+                    <div>
+                        <div class="form-group">
+                            <label>Imagen Izquierda (JPG/PNG, máx. 500KB)</label>
+                            <input type="file" id="pub-img-izq" class="form-input" accept="image/png,image/jpeg">
+                        </div>
+                        <div class="form-group">
+                            <label>Link de la imagen izquierda</label>
+                            <input type="url" id="pub-link-izq" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="form-group">
+                            <label>Imagen Derecha (JPG/PNG, máx. 500KB)</label>
+                            <input type="file" id="pub-img-der" class="form-input" accept="image/png,image/jpeg">
+                        </div>
+                        <div class="form-group">
+                            <label>Link de la imagen derecha</label>
+                            <input type="url" id="pub-link-der" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+                    <button onclick="guardarPublicidadAdmin()" class="btn-primary">💾 Guardar</button>
+                    <button onclick="cargarPublicidadAdmin()" class="btn-secondary">🔄 Recargar</button>
+                </div>
+                <div id="pub-msg" style="margin-top:0.75rem;font-size:13px;"></div>
+            </div>
         </section>
 
         <!-- ========== VEEDOR ========== -->
@@ -726,6 +818,10 @@
                 <p>Partidos en vivo, próximos juegos, resultados, tabla de posiciones por categoría.</p>
             </div>
 
+            <div id="est-main-layout" style="display:flex;gap:1.5rem;align-items:flex-start;">
+            <div id="est-ad-left" class="est-ad-column" style="display:none;flex:0 0 160px;position:sticky;top:100px;"></div>
+            <div id="est-central" style="flex:1;min-width:0;">
+
             <!-- EN VIVO -->
             <div id="est-en-vivo-section" style="margin-bottom:1.5rem;">
                 <h3 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--text-dark);margin-bottom:0.6rem;display:flex;align-items:center;gap:8px;">
@@ -777,11 +873,15 @@
                     </div>
                 </div>
             </div>
+            </div>
+            <div id="est-ad-right" class="est-ad-column" style="display:none;flex:0 0 160px;position:sticky;top:100px;"></div>
+            </div>
         </section>
 
     </main>
 
     <footer class="app-footer">
+        <div id="footer-social" class="footer-social" style="display:none;justify-content:center;gap:1rem;margin-bottom:1rem;"></div>
         <p>&copy; 2026 Asociación de Funcionarios del Ministerio de Educación y Ciencias (AFEMEC).</p>
         <p>Todos los derechos reservados.</p>
     </footer>
@@ -878,6 +978,12 @@
                     mostrarInstalar();
                 }
             }, 4000);
+        }
+
+        // Force admin tabs scrollable on mobile
+        if (window.innerWidth <= 768) {
+            var at = document.querySelector('.admin-tabs');
+            if (at) { at.style.overflowX = 'auto'; at.style.flexWrap = 'nowrap'; }
         }
 
         // Register Service Worker (ruta relativa)

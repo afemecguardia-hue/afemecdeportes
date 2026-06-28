@@ -140,6 +140,9 @@ function showSection(id) {
     document.querySelectorAll('.main-nav .nav-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`btn-${id}`) || document.getElementById(`nav-${id}`);
     if (activeBtn) activeBtn.classList.add('active');
+    document.querySelectorAll('.drawer-btn').forEach(btn => btn.classList.remove('active'));
+    const drawerActive = document.getElementById(`drawer-${id}`);
+    if (drawerActive) drawerActive.classList.add('active');
 
     // La suscripción Realtime se mantiene activa siempre
 
@@ -2435,8 +2438,121 @@ function mostrarAnimacionGol(partidoId, jugador, equipo, rival, minuto) {
     requestAnimationFrame(anim);
 }
 
+// ============================
+// PUBLICIDAD Y REDES SOCIALES
+// ============================
+async function cargarPublicidadAdmin() {
+    var msg = document.getElementById('pub-msg');
+    try {
+        var { data, error } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        if (error || !data) { if (msg) msg.textContent = 'Error al cargar: ' + (error ? error.message : 'sin datos'); return; }
+    } catch(e) { if (msg) msg.textContent = 'Error de conexión: ' + e.message; return; }
+    document.getElementById('pub-facebook').value = data.facebook_url || '';
+    document.getElementById('pub-instagram').value = data.instagram_url || '';
+    document.getElementById('pub-youtube').value = data.youtube_url || '';
+    document.getElementById('pub-web').value = data.web_url || '';
+    document.getElementById('pub-link-izq').value = data.ad_izquierda_link || '';
+    document.getElementById('pub-link-der').value = data.ad_derecha_link || '';
+    if (msg) msg.textContent = 'Datos cargados correctamente.';
+    window._pubData = data;
+}
+
+async function guardarPublicidadAdmin() {
+    var msg = document.getElementById('pub-msg');
+    var payload = {
+        facebook_url: document.getElementById('pub-facebook').value.trim(),
+        instagram_url: document.getElementById('pub-instagram').value.trim(),
+        youtube_url: document.getElementById('pub-youtube').value.trim(),
+        web_url: document.getElementById('pub-web').value.trim(),
+        ad_izquierda_link: document.getElementById('pub-link-izq').value.trim(),
+        ad_derecha_link: document.getElementById('pub-link-der').value.trim()
+    };
+    var imgIzq = document.getElementById('pub-img-izq').files[0];
+    var imgDer = document.getElementById('pub-img-der').files[0];
+    if (imgIzq) {
+        if (imgIzq.size > 500 * 1024) return alert('Imagen izquierda muy pesada (máx. 500KB)');
+        payload.ad_izquierda_img = await new Promise(function(resolve) {
+            var r = new FileReader();
+            r.onload = function(e) { resolve(e.target.result); };
+            r.readAsDataURL(imgIzq);
+        });
+    }
+    if (imgDer) {
+        if (imgDer.size > 500 * 1024) return alert('Imagen derecha muy pesada (máx. 500KB)');
+        payload.ad_derecha_img = await new Promise(function(resolve) {
+            var r = new FileReader();
+            r.onload = function(e) { resolve(e.target.result); };
+            r.readAsDataURL(imgDer);
+        });
+    }
+    var { error } = await supabaseClient.from('config_publicidad').upsert({ id: 1, ...payload });
+    if (error) {
+        if (msg) msg.textContent = 'Error al guardar: ' + error.message;
+    } else {
+        if (msg) msg.textContent = '✅ Publicidad guardada correctamente.';
+        await cargarPublicidadAdmin();
+    }
+}
+
+async function cargarRedesSociales() {
+    var container = document.getElementById('footer-social');
+    if (!container) return;
+    try {
+        var { data } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        if (!data) return;
+    } catch(e) { return; }
+    var redes = [
+        { key: 'facebook_url', label: 'Facebook', color: '#1877F2',
+          svg: '<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>' },
+        { key: 'instagram_url', label: 'Instagram', color: '#E4405F',
+          svg: '<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>' },
+        { key: 'youtube_url', label: 'YouTube', color: '#FF0000',
+          svg: '<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>' },
+        { key: 'web_url', label: 'Sitio Web', color: '#64748B',
+          svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="26" height="26"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>' }
+    ];
+    var html = '';
+    var alguna = false;
+    redes.forEach(function(r) {
+        if (data[r.key]) {
+            alguna = true;
+            var c = r.color;
+            html += '<a href="' + escHtml(data[r.key]) + '" target="_blank" rel="noopener" title="' + r.label + '" style="background:' + c + ';color:white;">';
+            html += r.svg;
+            html += '<span>' + r.label + '</span>';
+            html += '</a>';
+        }
+    });
+    container.innerHTML = html;
+    container.style.display = alguna ? 'flex' : 'none';
+}
+
+async function cargarAdsLaterales() {
+    var leftCol = document.getElementById('est-ad-left');
+    var rightCol = document.getElementById('est-ad-right');
+    if (!leftCol || !rightCol) return;
+    try {
+        var { data } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        if (!data) return;
+    } catch(e) { return; }
+    if (data.ad_izquierda_img && data.ad_izquierda_link) {
+        leftCol.innerHTML = '<a href="' + escHtml(data.ad_izquierda_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_izquierda_img) + '" alt="Publicidad"></a>';
+        leftCol.style.display = 'flex';
+    } else {
+        leftCol.style.display = 'none';
+    }
+    if (data.ad_derecha_img && data.ad_derecha_link) {
+        rightCol.innerHTML = '<a href="' + escHtml(data.ad_derecha_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_derecha_img) + '" alt="Publicidad"></a>';
+        rightCol.style.display = 'flex';
+    } else {
+        rightCol.style.display = 'none';
+    }
+}
+
 async function cargarEstadisticas() {
     try {
+        cargarRedesSociales();
+        cargarAdsLaterales();
         await cargarFixturePublico();
         await cargarEventosEnVivo();
         await cargarEstadisticasYTabla();
@@ -3151,6 +3267,7 @@ function switchAdminTab(tab, btn) {
     if (tab === 'partidos') cargarPartidosAdmin();
     if (tab === 'atletas') cargarAdminAtletas();
     if (tab === 'tarjetas') cargarConfigFaltasAdmin();
+    if (tab === 'publicidad') cargarPublicidadAdmin();
 }
 
 // ============================
@@ -3190,21 +3307,31 @@ document.getElementById('form-login').addEventListener('submit', async function(
 
         document.getElementById('nav-login').style.display = 'none';
         document.getElementById('nav-logout').style.display = 'block';
+        document.getElementById('drawer-login').style.display = 'none';
+        document.getElementById('drawer-logout').style.display = 'flex';
 
         document.getElementById('nav-veedor').style.display = 'none';
         document.getElementById('nav-caja').style.display = 'none';
         document.getElementById('nav-admin').style.display = 'none';
+        document.getElementById('drawer-veedor').style.display = 'none';
+        document.getElementById('drawer-caja').style.display = 'none';
+        document.getElementById('drawer-admin').style.display = 'none';
 
         if (userData.role === 'veedor') {
             document.getElementById('nav-veedor').style.display = 'block';
+            document.getElementById('drawer-veedor').style.display = 'flex';
             showSection('veedor');
         } else if (userData.role === 'caja') {
             document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('drawer-caja').style.display = 'flex';
             showSection('caja');
         } else if (userData.role === 'admin') {
             document.getElementById('nav-veedor').style.display = 'block';
             document.getElementById('nav-caja').style.display = 'block';
             document.getElementById('nav-admin').style.display = 'block';
+            document.getElementById('drawer-veedor').style.display = 'flex';
+            document.getElementById('drawer-caja').style.display = 'flex';
+            document.getElementById('drawer-admin').style.display = 'flex';
             showSection('admin');
         }
         alert(`Bienvenido al Panel de ${userData.role.toUpperCase()}`);
@@ -3220,6 +3347,17 @@ function logout() {
     location.reload();
 }
 
+function toggleMobileMenu() {
+    var backdrop = document.getElementById('mobile-menu-backdrop');
+    var drawer = document.getElementById('mobile-menu-drawer');
+    if (!backdrop || !drawer) return;
+    var isOpen = backdrop.classList.contains('open');
+    backdrop.classList.toggle('open');
+    drawer.classList.toggle('open');
+    backdrop.style.display = isOpen ? 'none' : 'block';
+    document.body.style.overflow = isOpen ? '' : 'hidden';
+}
+
 // ============================
 // INICIALIZACIÓN
 // ============================
@@ -3232,18 +3370,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userRole) {
         document.getElementById('nav-login').style.display = 'none';
         document.getElementById('nav-logout').style.display = 'block';
+        document.getElementById('drawer-login').style.display = 'none';
+        document.getElementById('drawer-logout').style.display = 'flex';
+
+        document.getElementById('drawer-veedor').style.display = 'none';
+        document.getElementById('drawer-caja').style.display = 'none';
+        document.getElementById('drawer-admin').style.display = 'none';
 
         if (userRole === 'veedor') {
             document.getElementById('nav-veedor').style.display = 'block';
+            document.getElementById('drawer-veedor').style.display = 'flex';
         } else if (userRole === 'caja') {
             document.getElementById('nav-caja').style.display = 'block';
+            document.getElementById('drawer-caja').style.display = 'flex';
         } else if (userRole === 'admin') {
             document.getElementById('nav-veedor').style.display = 'block';
             document.getElementById('nav-caja').style.display = 'block';
             document.getElementById('nav-admin').style.display = 'block';
+            document.getElementById('drawer-veedor').style.display = 'flex';
+            document.getElementById('drawer-caja').style.display = 'flex';
+            document.getElementById('drawer-admin').style.display = 'flex';
         }
     } else {
         document.getElementById('nav-login').style.display = 'block';
+        document.getElementById('drawer-login').style.display = 'flex';
     }
 });
 

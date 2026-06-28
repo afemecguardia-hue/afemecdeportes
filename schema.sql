@@ -276,3 +276,25 @@ DROP POLICY IF EXISTS "Permitir todo a todos en categoria_equipos" ON public.cat
 CREATE POLICY "Permitir todo a todos en categoria_equipos" ON public.categoria_equipos
     FOR ALL USING (true) WITH CHECK (true);
 
+-- 19. Tabla de Configuración de Publicidad y Redes Sociales
+CREATE TABLE IF NOT EXISTS public.config_publicidad (
+    id SERIAL PRIMARY KEY,
+    facebook_url TEXT DEFAULT '',
+    instagram_url TEXT DEFAULT '',
+    youtube_url TEXT DEFAULT '',
+    web_url TEXT DEFAULT '',
+    ad_izquierda_img TEXT DEFAULT '',
+    ad_izquierda_link TEXT DEFAULT '',
+    ad_derecha_img TEXT DEFAULT '',
+    ad_derecha_link TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.config_publicidad ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a todos en config_publicidad" ON public.config_publicidad;
+CREATE POLICY "Permitir todo a todos en config_publicidad" ON public.config_publicidad
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- Insertar fila por defecto
+INSERT INTO public.config_publicidad (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
