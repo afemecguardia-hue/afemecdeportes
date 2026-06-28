@@ -7,6 +7,8 @@ let canchasList = [];
 let equiposList = [];
 let configFaltas = [];
 let categoriaEquiposMap = {};
+let partidoActivoId = null;
+let tableroSyncInterval = null;
 
 async function inicializarTablasAuxiliares() {
     try {
@@ -166,6 +168,10 @@ function showSection(id) {
         cargarPartidosAdmin();
         cargarAdminAtletas();
         cargarConfigFaltasAdmin();
+    }
+    if (id === 'tablero') {
+        cargarEquiposTablero();
+        cargarPartidosEnVivoTablero();
     }
     if (id === 'programacion') {
         cargarEstadisticas();
@@ -737,9 +743,9 @@ async function agregarEquipo() {
     
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
-        // Validar tamaño (máximo 500KB)
-        if (file.size > 500 * 1024) {
-            return alert('El logo es muy pesado. El tamaño máximo permitido es 500 KB.');
+        // Validar tamaño (máximo 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            return alert('El logo es muy pesado. El tamaño máximo permitido es 5 MB.');
         }
         
         logoBase64 = await new Promise((resolve) => {
@@ -798,7 +804,7 @@ async function guardarEquipo(id) {
 
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
-        if (file.size > 500 * 1024) return alert('El logo es muy pesado. Máximo 500 KB.');
+        if (file.size > 5 * 1024 * 1024) return alert('El logo es muy pesado. Máximo 5 MB.');
         logo_url = await new Promise((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result);
@@ -3469,4 +3475,618 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', resizeGrass);
     resizeGrass();
     requestAnimationFrame(loopGrass);
+});
+
+// ============================
+// TABLERO DE PROYECCIÓN 4K
+// ============================
+
+let tableroTimerInterval = null;
+let tableroSeconds = 0;
+let tableroIsRunning = false;
+let tableroPeriod = 1;
+let tableroScoreA = 0;
+let tableroScoreB = 0;
+
+// Cargar equipos en los selects del tablero
+async function cargarEquiposTablero() {
+    try {
+        const selectA = document.getElementById('tablero-equipo-a');
+        const selectB = document.getElementById('tablero-equipo-b');
+        
+        if (!selectA || !selectB) return;
+        
+        // Limpiar opciones existentes
+        selectA.innerHTML = '<option value="">Seleccionar...</option>';
+        selectB.innerHTML = '<option value="">Seleccionar...</option>';
+        
+        // Cargar equipos desde la base de datos con sus logos
+        const { data: equipos, error } = await supabaseClient.from('equipos').select('*');
+        
+        if (error || !equipos) {
+            console.error('Error al cargar equipos:', error);
+            return;
+        }
+        
+        equiposList = equipos;
+        
+        equipos.forEach(function(equipo) {
+            const optionA = document.createElement('option');
+            optionA.value = equipo.id;
+            optionA.textContent = equipo.nombre;
+            selectA.appendChild(optionA);
+            
+            const optionB = document.createElement('option');
+            optionB.value = equipo.id;
+            optionB.textContent = equipo.nombre;
+            selectB.appendChild(optionB);
+        });
+        
+        // Cargar categorías
+        const selectCat = document.getElementById('tablero-categoria');
+        if (selectCat) {
+            selectCat.innerHTML = '<option value="">Seleccionar...</option>';
+            categoriasConfig.forEach(function(cat) {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nombre;
+                selectCat.appendChild(option);
+            });
+        }
+    } catch (e) {
+        console.error('Error al cargar equipos del tablero:', e);
+    }
+}
+
+// Mejorar imagen PNG para resolución 4K
+function mejorarImagenPara4K(dataUrl, callback) {
+    const img = new Image();
+    img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Dimensiones para ultra alta resolución (mínimo 1024x1024 para 4K)
+        const targetSize = Math.max(1024, Math.max(img.width, img.height));
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        
+        // Habilitar suavizado de ultra alta calidad
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Dibujar imagen redimensionada con fondo transparente
+        ctx.clearRect(0, 0, targetSize, targetSize);
+        ctx.drawImage(img, 0, 0, targetSize, targetSize);
+        
+        // Convertir a DataURL de ultra alta calidad
+        const improvedDataUrl = canvas.toDataURL('image/png', 1.0);
+        callback(improvedDataUrl);
+    };
+    
+    img.onerror = function() {
+        console.error('Error al procesar imagen para 4K');
+        callback(dataUrl); // Retornar original si falla
+    };
+    
+    img.src = dataUrl;
+}
+
+// Cargar logo de un equipo en el tablero
+function cargarLogoTablero(lado) {
+    const select = document.getElementById('tablero-equipo-' + lado);
+    const logoImg = document.getElementById('tablero-logo-' + lado);
+    
+    if (!select || !logoImg) return;
+    
+    const equipoId = select.value;
+    const equipo = equiposList.find(function(e) { return String(e.id) === String(equipoId); });
+    
+    if (equipo) {
+        // Obtener logo desde Supabase (campo logo_url)
+        if (equipo.logo_url && equipo.logo_url.trim() !== '') {
+            // Mejorar imagen para 4K
+            mejorarImagenPara4K(equipo.logo_url, function(improvedLogo) {
+                logoImg.src = improvedLogo;
+                logoImg.style.display = 'block';
+                logoImg.onerror = function() {
+                    console.error('Error al cargar logo mejorado');
+                    logoImg.style.display = 'none';
+                };
+            });
+        } else {
+            console.log('El equipo no tiene logo en Supabase');
+            logoImg.style.display = 'none';
+        }
+    } else {
+        logoImg.style.display = 'none';
+    }
+}
+
+// Iniciar el tablero de proyección
+function iniciarTablero() {
+    alert('Por favor selecciona un partido en vivo de la lista');
+}
+
+// Iniciar tablero manualmente
+function iniciarTableroManual() {
+    const selectA = document.getElementById('tablero-equipo-a');
+    const selectB = document.getElementById('tablero-equipo-b');
+    const selectCat = document.getElementById('tablero-categoria');
+    const proyeccion = document.getElementById('tablero-proyeccion');
+    
+    if (!selectA || !selectB) {
+        alert('Error: No se encontraron los selects de equipos');
+        return;
+    }
+    
+    if (!selectA.value || !selectB.value) {
+        alert('Por favor selecciona ambos equipos');
+        return;
+    }
+    
+    // Cargar logos
+    cargarLogoTablero('a');
+    cargarLogoTablero('b');
+    
+    // Mostrar categoría
+    const categoria = categoriasConfig.find(function(c) { return String(c.id) === String(selectCat.value); });
+    const catDisplay = document.getElementById('tablero-categoria-display');
+    if (catDisplay) {
+        catDisplay.textContent = categoria ? categoria.nombre : 'TORNEO';
+    }
+    
+    // Mostrar tablero
+    proyeccion.style.display = 'block';
+    
+    // Resetear valores
+    tableroScoreA = 0;
+    tableroScoreB = 0;
+    tableroSeconds = 0;
+    tableroPeriod = 1;
+    tableroIsRunning = false;
+    partidoActivoId = null;
+    
+    actualizarMarcadorTablero();
+    actualizarTimerTablero();
+}
+
+// Cargar partidos en vivo para el tablero
+async function cargarPartidosEnVivoTablero() {
+    const container = document.getElementById('partidos-en-vivo-container');
+    if (!container) return;
+    
+    container.innerHTML = '<p style="color: var(--text-muted);">Cargando partidos...</p>';
+    
+    const { data: partidos, error } = await supabaseClient
+        .from('partidos')
+        .select('*')
+        .eq('en_curso', true)
+        .order('fecha_hora', { ascending: true });
+    
+    if (error || !partidos || partidos.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted);">No hay partidos en vivo</p>';
+        document.getElementById('configuracion-manual').style.display = 'block';
+        return;
+    }
+    
+    document.getElementById('configuracion-manual').style.display = 'none';
+    container.innerHTML = '';
+    
+    partidos.forEach(p => {
+        const eqA = equiposList.find(e => String(e.id) === String(p.equipo_a_id));
+        const eqB = equiposList.find(e => String(e.id) === String(p.equipo_b_id));
+        const cat = categoriasConfig.find(c => String(c.id) === String(p.categoria_id));
+        
+        if (!eqA || !eqB || !cat) return;
+        
+        const card = document.createElement('div');
+        card.style.cssText = 'background: linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(185,28,28,0.1) 100%); padding: 1rem; border-radius: 12px; border: 2px solid rgba(245,158,11,0.3); cursor: pointer; transition: all 0.3s;';
+        card.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="font-size: 12px; font-weight: 700; color: var(--accent-color); background: rgba(245,158,11,0.2); padding: 2px 8px; border-radius: 4px;">▶ EN VIVO</span>
+                <span style="font-size: 11px; color: var(--text-muted);">${escHtml(cat.nombre)}</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="font-weight: 700; color: #fff;">${escHtml(eqA.nombre)}</span>
+                <span style="font-size: 18px; font-weight: 900; color: var(--accent-color);">${p.goles_a} - ${p.goles_b}</span>
+                <span style="font-weight: 700; color: #fff;">${escHtml(eqB.nombre)}</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                <span style="font-size: 14px; font-weight: 600; color: #fff;">${formatearTiempo(obtenerTiempoActual(p))}</span>
+                <span style="font-size: 12px; color: var(--text-muted);">${obtenerPeriodoLabel(p)}</span>
+            </div>
+        `;
+        
+        card.onclick = function() {
+            iniciarTableroDesdePartido(p);
+        };
+        
+        card.onmouseover = function() {
+            this.style.borderColor = 'rgba(245,158,11,0.8)';
+            this.style.transform = 'translateY(-2px)';
+        };
+        
+        card.onmouseout = function() {
+            this.style.borderColor = 'rgba(245,158,11,0.3)';
+            this.style.transform = 'translateY(0)';
+        };
+        
+        container.appendChild(card);
+    });
+}
+
+// Iniciar tablero desde un partido en vivo
+async function iniciarTableroDesdePartido(partido) {
+    const proyeccion = document.getElementById('tablero-proyeccion');
+    const catDisplay = document.getElementById('tablero-categoria-display');
+    
+    const eqA = equiposList.find(e => String(e.id) === String(partido.equipo_a_id));
+    const eqB = equiposList.find(e => String(e.id) === String(partido.equipo_b_id));
+    const cat = categoriasConfig.find(c => String(c.id) === String(partido.categoria_id));
+    
+    if (!eqA || !eqB || !cat) {
+        alert('Error: No se encontraron datos del partido');
+        return;
+    }
+    
+    // Configurar datos del partido
+    partidoActivoId = partido.id;
+    tableroScoreA = partido.goles_a || 0;
+    tableroScoreB = partido.goles_b || 0;
+    tableroSeconds = partido.tiempo_jugado || 0;
+    tableroPeriod = partido.periodo === 'segundo_tiempo' ? 2 : 1;
+    tableroIsRunning = partido.en_curso;
+    
+    // Detener cualquier timer local anterior
+    tableroPausar();
+    
+    // Cargar logos
+    const logoImgA = document.getElementById('tablero-logo-a');
+    const logoImgB = document.getElementById('tablero-logo-b');
+    
+    if (eqA.logo_url && eqA.logo_url.trim() !== '') {
+        mejorarImagenPara4K(eqA.logo_url, function(improvedLogo) {
+            logoImgA.src = improvedLogo;
+            logoImgA.style.display = 'block';
+        });
+    } else {
+        logoImgA.style.display = 'none';
+    }
+    
+    if (eqB.logo_url && eqB.logo_url.trim() !== '') {
+        mejorarImagenPara4K(eqB.logo_url, function(improvedLogo) {
+            logoImgB.src = improvedLogo;
+            logoImgB.style.display = 'block';
+        });
+    } else {
+        logoImgB.style.display = 'none';
+    }
+    
+    // Mostrar categoría
+    if (catDisplay) {
+        catDisplay.textContent = cat.nombre;
+    }
+    
+    // Mostrar tablero
+    proyeccion.style.display = 'block';
+    
+    actualizarMarcadorTablero();
+    actualizarTimerTablero();
+    
+    // NO iniciar timer local - el polling se encarga del tiempo
+    // Solo para modo manual sin partido activo
+    
+    // Iniciar sincronización por polling (más confiable)
+    iniciarSincronizacionTablero(partido.id);
+    
+    // Suscribirse a cambios en tiempo real del partido
+    suscribirAPartido(partido.id);
+}
+
+// Sincronizar tablero por polling (método confiable)
+function iniciarSincronizacionTablero(partidoId) {
+    // Limpiar intervalo anterior si existe
+    if (tableroSyncInterval) {
+        clearInterval(tableroSyncInterval);
+    }
+    
+    // Sincronizar cada 500ms para mayor precisión
+    tableroSyncInterval = setInterval(async function() {
+        if (!partidoActivoId) {
+            clearInterval(tableroSyncInterval);
+            tableroSyncInterval = null;
+            return;
+        }
+        
+        try {
+            const { data: partido, error } = await supabaseClient
+                .from('partidos')
+                .select('*')
+                .eq('id', partidoActivoId)
+                .single();
+            
+            if (error || !partido) {
+                console.error('Error al sincronizar partido:', error);
+                return;
+            }
+            
+            // Contar goles desde partido_eventos (más confiable)
+            const { data: eventosGol, error: errorGol } = await supabaseClient
+                .from('partido_eventos')
+                .select('*')
+                .eq('partido_id', partidoActivoId)
+                .eq('tipo', 'gol');
+            
+            let golesA = 0;
+            let golesB = 0;
+            
+            if (!errorGol && eventosGol) {
+                golesA = eventosGol.filter(e => String(e.equipo_id) === String(partido.equipo_a_id)).length;
+                golesB = eventosGol.filter(e => String(e.equipo_id) === String(partido.equipo_b_id)).length;
+            }
+            
+            // Actualizar marcador con goles contados
+            tableroScoreA = golesA;
+            tableroScoreB = golesB;
+            actualizarMarcadorTablero();
+            
+            // Calcular tiempo actual
+            let tiempoActual = partido.tiempo_jugado || 0;
+            if (partido.en_curso && partido.inicio_periodo) {
+                const inicio = new Date(partido.inicio_periodo);
+                const ahora = new Date();
+                const transcurrido = Math.floor((ahora - inicio) / 1000);
+                tiempoActual += transcurrido;
+            }
+            
+            // Actualizar tiempo SIEMPRE para sincronización precisa
+            tableroSeconds = tiempoActual;
+            actualizarTimerTablero();
+            
+            // Actualizar período
+            const nuevoPeriodo = partido.periodo === 'segundo_tiempo' ? 2 : 1;
+            tableroPeriod = nuevoPeriodo;
+            
+            // Actualizar estado del timer (solo para control visual)
+            tableroIsRunning = partido.en_curso;
+            
+            // Si el partido finalizó, detener sincronización
+            if (partido.finalizado) {
+                tableroPausar();
+                clearInterval(tableroSyncInterval);
+                tableroSyncInterval = null;
+                if (partidoRealtimeChannel) {
+                    supabaseClient.removeChannel(partidoRealtimeChannel);
+                    partidoRealtimeChannel = null;
+                }
+                partidoActivoId = null;
+            }
+        } catch (e) {
+            console.error('Error en sincronización:', e);
+        }
+    }, 500);
+}
+
+// Suscribirse a cambios en tiempo real del partido
+let partidoRealtimeChannel = null;
+
+function suscribirAPartido(partidoId) {
+    if (partidoRealtimeChannel) {
+        supabaseClient.removeChannel(partidoRealtimeChannel);
+    }
+    
+    partidoRealtimeChannel = supabaseClient
+        .channel('partido-' + partidoId)
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'partidos',
+            filter: 'id=eq.' + partidoId
+        }, function(payload) {
+            const p = payload.new;
+            if (!p) return;
+            
+            // Actualizar marcador
+            tableroScoreA = p.goles_a || 0;
+            tableroScoreB = p.goles_b || 0;
+            actualizarMarcadorTablero();
+            
+            // Actualizar tiempo
+            tableroSeconds = p.tiempo_jugado || 0;
+            tableroPeriod = p.periodo === 'segundo_tiempo' ? 2 : 1;
+            actualizarTimerTablero();
+            
+            // Controlar estado del timer
+            if (p.en_curso && !tableroIsRunning) {
+                tableroIniciar();
+            } else if (!p.en_curso && tableroIsRunning) {
+                tableroPausar();
+            }
+            
+            // Si el partido finalizó, detener todo
+            if (p.finalizado) {
+                tableroPausar();
+                if (partidoRealtimeChannel) {
+                    supabaseClient.removeChannel(partidoRealtimeChannel);
+                    partidoRealtimeChannel = null;
+                }
+            }
+        })
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'partido_eventos',
+            filter: 'partido_id=eq.' + partidoId
+        }, function(payload) {
+            const ev = payload.new;
+            if (ev && ev.tipo === 'gol') {
+                // Recargar datos del partido para obtener goles actualizados
+                supabaseClient.from('partidos').select('*').eq('id', partidoId).single().then(function({ data }) {
+                    if (data) {
+                        tableroScoreA = data.goles_a || 0;
+                        tableroScoreB = data.goles_b || 0;
+                        actualizarMarcadorTablero();
+                    }
+                });
+            }
+        })
+        .subscribe();
+}
+
+// Funciones auxiliares para tiempo
+function obtenerTiempoActual(partido) {
+    if (!partido.en_curso) return partido.tiempo_jugado || 0;
+    
+    const inicio = new Date(partido.inicio_periodo);
+    const ahora = new Date();
+    const transcurrido = Math.floor((ahora - inicio) / 1000);
+    return (partido.tiempo_jugado || 0) + transcurrido;
+}
+
+function formatearTiempo(segundos) {
+    const mins = Math.floor(segundos / 60);
+    const secs = segundos % 60;
+    return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+}
+
+function obtenerPeriodoLabel(partido) {
+    if (partido.periodo === 'primer_tiempo') return '1T';
+    if (partido.periodo === 'segundo_tiempo') return '2T';
+    if (partido.periodo === 'entretiempo') return 'Entretiempo';
+    if (partido.periodo === 'finalizado') return 'Finalizado';
+    return '1T';
+}
+
+// Iniciar cronómetro
+function tableroIniciar() {
+    if (tableroIsRunning) return;
+    
+    tableroIsRunning = true;
+    const timerDisplay = document.getElementById('tablero-timer-display');
+    if (timerDisplay) {
+        timerDisplay.classList.add('timer-running');
+    }
+    
+    tableroTimerInterval = setInterval(function() {
+        tableroSeconds++;
+        actualizarTimerTablero();
+    }, 1000);
+}
+
+// Pausar cronómetro
+function tableroPausar() {
+    if (!tableroIsRunning) return;
+    
+    tableroIsRunning = false;
+    clearInterval(tableroTimerInterval);
+    
+    const timerDisplay = document.getElementById('tablero-timer-display');
+    if (timerDisplay) {
+        timerDisplay.classList.remove('timer-running');
+    }
+}
+
+// Reiniciar cronómetro
+function tableroReset() {
+    tableroPausar();
+    tableroSeconds = 0;
+    actualizarTimerTablero();
+}
+
+// Actualizar display del timer
+function actualizarTimerTablero() {
+    const minutes = Math.floor(tableroSeconds / 60);
+    const seconds = tableroSeconds % 60;
+    const timeStr = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    
+    const timerDisplay = document.getElementById('tablero-timer-display');
+    if (timerDisplay) {
+        timerDisplay.textContent = timeStr;
+    }
+    
+    // Actualizar período
+    const periodDisplay = document.getElementById('tablero-period-display');
+    if (periodDisplay) {
+        periodDisplay.textContent = tableroPeriod + 'T';
+    }
+}
+
+// Actualizar marcador
+function actualizarMarcadorTablero() {
+    const scoreA = document.getElementById('tablero-score-a');
+    const scoreB = document.getElementById('tablero-score-b');
+    
+    if (scoreA) scoreA.textContent = tableroScoreA;
+    if (scoreB) scoreB.textContent = tableroScoreB;
+}
+
+// Registrar gol
+function tableroGol(equipo, delta) {
+    if (equipo === 'a') {
+        tableroScoreA = Math.max(0, tableroScoreA + delta);
+    } else {
+        tableroScoreB = Math.max(0, tableroScoreB + delta);
+    }
+    
+    actualizarMarcadorTablero();
+    
+    // Animación de gol
+    const scoreElement = document.getElementById('tablero-score-' + equipo);
+    if (scoreElement && delta > 0) {
+        scoreElement.classList.remove('score-goal');
+        void scoreElement.offsetWidth; // Trigger reflow
+        scoreElement.classList.add('score-goal');
+    }
+}
+
+// Cambiar período
+function tableroCambiarPeriodo() {
+    tableroPeriod = tableroPeriod === 1 ? 2 : 1;
+    tableroReset();
+    actualizarTimerTablero();
+}
+
+// Pantalla completa
+function tableroFullscreen() {
+    const proyeccion = document.getElementById('tablero-proyeccion');
+    
+    if (!proyeccion) return;
+    
+    if (!document.fullscreenElement) {
+        proyeccion.requestFullscreen().catch(function(err) {
+            console.error('Error al activar pantalla completa:', err);
+            alert('No se pudo activar pantalla completa. Asegúrate de que el navegador lo permita.');
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
+
+// Escuchar cambios de pantalla completa
+document.addEventListener('fullscreenchange', function() {
+    const proyeccion = document.getElementById('tablero-proyeccion');
+    if (proyeccion) {
+        if (document.fullscreenElement) {
+            proyeccion.style.borderRadius = '0';
+        } else {
+            proyeccion.style.borderRadius = '16px';
+        }
+    }
+});
+
+// Inicializar tablero al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    // Cargar equipos cuando se muestre la sección del tablero
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.target.id === 'tablero' && mutation.target.style.display !== 'none') {
+                cargarEquiposTablero();
+            }
+        });
+    });
+    
+    const tableroSection = document.getElementById('tablero');
+    if (tableroSection) {
+        observer.observe(tableroSection, { attributes: true, attributeFilter: ['style'] });
+    }
 });

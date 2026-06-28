@@ -1775,3 +1775,112 @@ footer.app-footer p {
         transform: translateY(100vh) rotate(720deg) scale(0.2);
     }
 }
+
+/* ==========================================================================
+   TABLERO DE PROYECCIÓN 4K (55 PULGADAS)
+   ========================================================================== */
+
+#tablero-proyeccion {
+    /* Optimizado para resolución 4K (3840x2160) */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+#tablero-proyeccion button {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#tablero-proyeccion button:hover {
+    transform: scale(1.05);
+}
+
+#tablero-proyeccion button:active {
+    transform: scale(0.95);
+}
+
+/* Animación de pulso para el timer cuando está corriendo */
+@keyframes timerPulse {
+    0%, 100% {
+        text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+    50% {
+        text-shadow: 0 2px 20px rgba(245,158,11,0.8), 0 0 40px rgba(245,158,11,0.4);
+    }
+}
+
+.timer-running {
+    animation: timerPulse 1s ease-in-out infinite;
+}
+
+/* Animación de gol para el marcador */
+@keyframes scorePulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+        text-shadow: 0 0 30px rgba(245,158,11,1), 0 0 60px rgba(245,158,11,0.6);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.score-goal {
+    animation: scorePulse 0.5s ease-in-out;
+}
+
+/* Optimización para pantalla completa */
+#tablero-proyeccion:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+}
+
+/* Responsive para diferentes tamaños de pantalla */
+@media (max-width: 1920px) {
+    #tablero-proyeccion {
+        /* Escalar proporcionalmente para pantallas menores a 4K */
+        transform: scale(0.9);
+    }
+}
+
+@media (max-width: 1366px) {
+    #tablero-proyeccion {
+        /* Ajustes para laptops */
+        transform: scale(0.8);
+    }
+}
+
+/* High DPI optimization */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    #tablero-proyeccion img {
+        image-rendering: -webkit-optimize-contrast;
+    }
+}
+
+/* Animación del logo AFEMEC - brillo rojo de derecha a izquierda */
+@keyframes afemecGlow {
+    0%, 100% {
+        color: #fff;
+        text-shadow: 0 4px 20px rgba(245,158,11,0.5);
+        transform: translateX(0);
+    }
+    25% {
+        color: #ef4444;
+        text-shadow: 0 4px 30px rgba(239,68,68,0.8), 0 0 60px rgba(239,68,68,0.4);
+        transform: translateX(-10px);
+    }
+    50% {
+        color: #fff;
+        text-shadow: 0 4px 20px rgba(245,158,11,0.5);
+        transform: translateX(0);
+    }
+    75% {
+        color: #ef4444;
+        text-shadow: 0 4px 30px rgba(239,68,68,0.8), 0 0 60px rgba(239,68,68,0.4);
+        transform: translateX(10px);
+    }
+}
