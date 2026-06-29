@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
     <style>
         .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -748,7 +748,7 @@
             <!-- Veedor: Goles / Tarjetas en partido (roster-based) -->
             <div style="margin-top:2rem;border-top:2px solid var(--border);padding-top:1.5rem;">
                 <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:0.5rem;display:flex;align-items:center;gap:8px;">
-                    <i data-lucide="soccer" style="color:var(--primary-color);width:20px;height:20px;"></i> Goles / Tarjetas en Partido
+                    <i data-lucide="goal" style="color:var(--primary-color);width:20px;height:20px;"></i> Goles / Tarjetas en Partido
                 </h3>
                 <p style="color:var(--text-muted);font-size:13px;margin-bottom:1rem;">Seleccioná el partido y el equipo, y marcá goles o tarjetas sobre la lista de jugadores.</p>
 
@@ -1004,7 +1004,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
 
 
 
@@ -1113,6 +1113,39 @@
             });
         }
     })();
+<!-- ========== MODAL PERFIL DE EQUIPO ========== -->
+<div id="modal-perfil-equipo" class="modal-perfil" style="display:none;">
+    <div class="modal-perfil-backdrop" onclick="cerrarPerfilEquipo()"></div>
+    <div class="modal-perfil-content">
+        <div class="modal-perfil-header">
+            <div class="perfil-logo-container">
+                <img id="perfil-equipo-logo" src="" alt="Logo Equipo" onerror="this.style.display='none'">
+            </div>
+            <h2 id="perfil-equipo-nombre">Nombre del Equipo</h2>
+            <button class="close-perfil" onclick="cerrarPerfilEquipo()">&times;</button>
+        </div>
+        
+        <div class="perfil-nav">
+            <button onclick="cambiarSeccionPerfil('jugadores')" class="perfil-nav-btn active" id="btn-perfil-jugadores">
+                <i data-lucide="users"></i> Jugadores
+            </button>
+            <button onclick="cambiarSeccionPerfil('stats')" class="perfil-nav-btn" id="btn-perfil-stats">
+                <i data-lucide="bar-chart-2"></i> Estadísticas
+            </button>
+            <button onclick="cambiarSeccionPerfil('calendario')" class="perfil-nav-btn" id="btn-perfil-calendario">
+                <i data-lucide="calendar"></i> Calendario
+            </button>
+            <button onclick="cambiarSeccionPerfil('resumen')" class="perfil-nav-btn" id="btn-perfil-resumen">
+                <i data-lucide="file-text"></i> Resumen
+            </button>
+        </div>
+
+        <div id="perfil-content" class="perfil-content">
+            <!-- Contenido dinámico según la sección -->
+            <div style="text-align:center;padding:2rem;color:var(--text-muted);">Cargando datos...</div>
+        </div>
+    </div>
+</div>
     </script>
-</body>
+    </body>
 </html>

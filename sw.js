@@ -1,4 +1,4 @@
-const CACHE = 'afemec-v2';
+const CACHE = 'afemec-v3';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -6,8 +6,8 @@ self.addEventListener('install', e => {
       return cache.addAll([
         '.',
         './index.html',
-        './style.css',
-        './app.js?v=10',
+        './style.css?v=4',
+        './app.js?v=11',
         './logo2.png',
         'https://unpkg.com/lucide@latest',
         'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
