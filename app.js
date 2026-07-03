@@ -3826,12 +3826,12 @@ async function buscarSocioAdmin() {
                 }
 
                 let detalleExtra = '';
-                // Si es cónyuge, mostrar CI siempre
-                if (f.tipo === 'conyuge') {
-                    if (f.habilitado) {
-                        detalleExtra = `<span style="color: #10b981; font-weight: 600;"> | CI: ${f.ci || 'N/A'}</span>`;
+                // Mostrar CI si el familiar tiene CI cargado
+                if (f.ci && f.ci !== '' && f.ci !== '0') {
+                    if (f.tipo === 'conyuge' && f.habilitado) {
+                        detalleExtra = `<span style="color: #10b981; font-weight: 600;"> | CI: ${f.ci}</span>`;
                     } else {
-                        detalleExtra = `<span style="color: var(--text-muted); font-weight: 600;"> | CI: ${f.ci || 'N/A'}</span>`;
+                        detalleExtra = `<span style="color: var(--text-muted); font-weight: 600;"> | CI: ${f.ci}</span>`;
                     }
                 }
 
