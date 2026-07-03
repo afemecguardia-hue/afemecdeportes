@@ -47,6 +47,10 @@
         .flex-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
         .mt-1 { margin-top: 1rem; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes adPulse {
+            0%, 100% { transform: scale(1); opacity: 1; filter: brightness(1); box-shadow: 0 0 0 rgba(245,158,11,0); }
+            50% { transform: scale(1.05); opacity: 0.9; filter: brightness(1.2); box-shadow: 0 0 20px rgba(245,158,11,0.5); }
+        }
         .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(8px); }
         .modal { background:linear-gradient(145deg,rgba(40,10,10,0.95),rgba(20,5,5,0.98)); border-radius:16px; padding:24px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.08); color:white; }
     </style>
@@ -935,7 +939,6 @@
             </div>
 
             <div id="est-main-layout" style="display:flex;gap:1.5rem;align-items:flex-start;">
-            <div id="est-ad-left" class="est-ad-column" style="display:none;flex:0 0 160px;position:sticky;top:100px;"></div>
             <div id="est-central" style="flex:1;min-width:0;">
 
             <!-- EN VIVO -->
@@ -990,9 +993,11 @@
                 </div>
             </div>
             </div>
-            <div id="est-ad-right" class="est-ad-column" style="display:none;flex:0 0 160px;position:sticky;top:100px;"></div>
             </div>
         </section>
+
+        <div id="est-ad-left" class="est-ad-column" style="display:none;position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:10;padding:0 20px;"></div>
+        <div id="est-ad-right" class="est-ad-column" style="display:none;position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:10;padding:0 20px;"></div>
 
     </main>
 

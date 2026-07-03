@@ -1870,6 +1870,11 @@ async function veedorIniciarPartido() {
     if (finalizar) finalizar.style.display = periodo === 'segundo_tiempo' ? 'inline-block' : 'none';
     await cargarPartidosAdmin();
     await cargarEstadisticas();
+    // Sincronizar con tablero si está activo el mismo partido
+    if (partidoActivoId && String(partidoActivoId) === String(pid)) {
+        tableroIsRunning = true;
+        // El polling se encargará de sincronizar el tiempo
+    }
 }
 
 async function veedorFinalizarPartido() {
@@ -1900,6 +1905,14 @@ async function veedorPausarPartido() {
     } else {
         if (iniciar) iniciar.style.display = 'inline-block';
         if (fin1t) fin1t.style.display = 'none';
+    }
+    // Sincronizar con tablero si está activo el mismo partido
+    if (partidoActivoId && String(partidoActivoId) === String(_veedorPartidoActual.id)) {
+        tableroIsRunning = false;
+        if (tableroTimerInterval) {
+            clearInterval(tableroTimerInterval);
+            tableroTimerInterval = null;
+        }
     }
 }
 
@@ -2245,20 +2258,26 @@ function actualizarDisplayTimer(pid, seg, partido, cs) {
     if (timerSpan) timerSpan.textContent = timeStr;
     const periodSpan = document.getElementById('period-' + pid);
     if (periodSpan) periodSpan.textContent = label;
-    const veedorTimer = document.getElementById('veedor-timer-display');
-    const veedorPeriod = document.getElementById('veedor-period-display');
-    if (veedorTimer) veedorTimer.textContent = timeStr;
-    if (veedorPeriod) veedorPeriod.textContent = label;
+    // Solo actualizar display del veedor si es el partido actual seleccionado
+    if (_veedorPartidoActual && String(_veedorPartidoActual.id) === String(pid)) {
+        const veedorTimer = document.getElementById('veedor-timer-display');
+        const veedorPeriod = document.getElementById('veedor-period-display');
+        if (veedorTimer) veedorTimer.textContent = timeStr;
+        if (veedorPeriod) veedorPeriod.textContent = label;
+    }
     var extra = obtenerTiempoAdicional(partido, seg);
     var extraSpan = document.getElementById('extra-' + pid);
     if (extraSpan) {
         if (extra > 0) { extraSpan.textContent = '+' + formatearTiempo(extra); extraSpan.style.display = 'inline'; }
         else { extraSpan.style.display = 'none'; }
     }
-    var veedorExtra = document.getElementById('veedor-extra-display');
-    if (veedorExtra) {
-        if (extra > 0) { veedorExtra.textContent = '+' + formatearTiempo(extra); veedorExtra.style.display = 'inline'; }
-        else { veedorExtra.style.display = 'none'; }
+    // Solo actualizar display extra del veedor si es el partido actual seleccionado
+    if (_veedorPartidoActual && String(_veedorPartidoActual.id) === String(pid)) {
+        var veedorExtra = document.getElementById('veedor-extra-display');
+        if (veedorExtra) {
+            if (extra > 0) { veedorExtra.textContent = '+' + formatearTiempo(extra); veedorExtra.style.display = 'inline'; }
+            else { veedorExtra.style.display = 'none'; }
+        }
     }
 }
 
@@ -2552,13 +2571,13 @@ async function cargarAdsLaterales() {
         if (!data) return;
     } catch(e) { return; }
     if (data.ad_izquierda_img && data.ad_izquierda_link) {
-        leftCol.innerHTML = '<a href="' + escHtml(data.ad_izquierda_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_izquierda_img) + '" alt="Publicidad"></a>';
+        leftCol.innerHTML = '<a href="' + escHtml(data.ad_izquierda_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_izquierda_img) + '" alt="Publicidad" style="width:250px;height:auto;max-height:600px;object-fit:contain;animation:adPulse 3s ease-in-out infinite;"></a>';
         leftCol.style.display = 'flex';
     } else {
         leftCol.style.display = 'none';
     }
     if (data.ad_derecha_img && data.ad_derecha_link) {
-        rightCol.innerHTML = '<a href="' + escHtml(data.ad_derecha_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_derecha_img) + '" alt="Publicidad"></a>';
+        rightCol.innerHTML = '<a href="' + escHtml(data.ad_derecha_link) + '" target="_blank" rel="noopener"><img src="' + escHtml(data.ad_derecha_img) + '" alt="Publicidad" style="width:250px;height:auto;max-height:600px;object-fit:contain;animation:adPulse 3s ease-in-out infinite;"></a>';
         rightCol.style.display = 'flex';
     } else {
         rightCol.style.display = 'none';
@@ -4344,10 +4363,12 @@ function iniciarSincronizacionTablero(partidoId) {
                 golesB = eventosGol.filter(e => String(e.equipo_id) === String(partido.equipo_b_id)).length;
             }
             
-            // Actualizar marcador con goles contados
-            tableroScoreA = golesA;
-            tableroScoreB = golesB;
-            actualizarMarcadorTablero();
+            // Actualizar marcador con goles contados SOLO si hay cambio
+            if (tableroScoreA !== golesA || tableroScoreB !== golesB) {
+                tableroScoreA = golesA;
+                tableroScoreB = golesB;
+                actualizarMarcadorTablero();
+            }
             
             // Calcular tiempo actual con validación
             let tiempoActual = Math.max(0, Number(partido.tiempo_jugado) || 0);
@@ -4359,12 +4380,17 @@ function iniciarSincronizacionTablero(partidoId) {
             }
             
             // Actualizar tiempo SIEMPRE para sincronización precisa
-            tableroSeconds = tiempoActual;
-            actualizarTimerTablero();
+            if (tableroSeconds !== tiempoActual) {
+                tableroSeconds = tiempoActual;
+                actualizarTimerTablero();
+            }
             
             // Actualizar período
             const nuevoPeriodo = partido.periodo === 'segundo_tiempo' ? 2 : 1;
-            tableroPeriod = nuevoPeriodo;
+            if (tableroPeriod !== nuevoPeriodo) {
+                tableroPeriod = nuevoPeriodo;
+                actualizarTimerTablero();
+            }
             
             // Actualizar estado del timer (solo para control visual)
             tableroIsRunning = partido.en_curso;
@@ -4462,10 +4488,14 @@ function tableroIniciar() {
         timerDisplay.classList.add('timer-running');
     }
     
-    tableroTimerInterval = setInterval(function() {
-        tableroSeconds++;
-        actualizarTimerTablero();
-    }, 1000);
+    // NO iniciar timer local - usar sincronización por polling
+    // Solo para modo manual sin partido activo
+    if (!partidoActivoId) {
+        tableroTimerInterval = setInterval(function() {
+            tableroSeconds++;
+            actualizarTimerTablero();
+        }, 1000);
+    }
 }
 
 // Pausar cronómetro
@@ -4517,6 +4547,12 @@ function actualizarMarcadorTablero() {
 
 // Registrar gol
 function tableroGol(equipo, delta) {
+    // Solo permitir cambios manuales si NO hay partido activo sincronizado
+    if (partidoActivoId) {
+        alert('No se pueden modificar goles manualmente cuando hay un partido sincronizado. Usá el veedor para registrar goles.');
+        return;
+    }
+    
     if (equipo === 'a') {
         tableroScoreA = Math.max(0, tableroScoreA + delta);
     } else {
