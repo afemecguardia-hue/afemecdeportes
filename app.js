@@ -3764,30 +3764,110 @@ async function buscarSocioAdmin() {
         if (eq) equipoTexto = eq.nombre;
     }
 
-    // Obtener familiares
-    let familiaTexto = '';
+    // Calcular edad desde fecha de nacimiento
+    let edadTexto = 'N/A';
+    let fechaNacTexto = 'N/A';
+    if (socio.fecha_nacimiento) {
+        const edad = calcularEdadDesdeFecha(socio.fecha_nacimiento);
+        edadTexto = edad >= 0 ? edad + ' años' : 'N/A';
+        fechaNacTexto = socio.fecha_nacimiento;
+    } else if (socio.edad) {
+        edadTexto = socio.edad + ' años';
+    }
+
+    // Verificar si el cónyuge es socio y obtener sus datos
+    let conyugeSocioTexto = 'No';
+    let conyugeDatos = null;
     if (socio.tipo === 'titular') {
+        const { data: conyuge } = await supabaseClient
+            .from('socios')
+            .select('*')
+            .eq('familia_id', socio.id)
+            .eq('tipo', 'conyuge')
+            .maybeSingle();
+        if (conyuge && conyuge.habilitado) {
+            conyugeSocioTexto = 'Sí';
+            conyugeDatos = conyuge;
+        }
+    }
+
+    // Obtener familiares y mostrar en lista detallada
+    let familiaHtml = '';
+    console.log('Buscando familiares para socio:', socio.ci, 'tipo:', socio.tipo, 'id:', socio.id, 'familia_id:', socio.familia_id);
+    
+    // Determinar el ID del titular para buscar familiares
+    let titularId = null;
+    if (socio.tipo === 'titular') {
+        titularId = socio.id;
+        console.log('Socio es titular, usando su propio ID:', titularId);
+    } else if (socio.familia_id) {
+        titularId = socio.familia_id;
+        console.log('Socio no es titular, usando familia_id:', titularId);
+    }
+    
+    if (titularId) {
         const { data: fam } = await supabaseClient
             .from('socios')
-            .select('nombre, apellido, tipo')
-            .eq('familia_id', socio.id);
+            .select('*')
+            .eq('familia_id', titularId);
+        console.log('Familiares encontrados para titularId', titularId, ':', fam);
+        console.log('Cantidad de familiares:', fam ? fam.length : 0);
         if (fam && fam.length) {
-            familiaTexto = fam.map(f => `${f.nombre} ${f.apellido} (${f.tipo})`).join(', ');
+            fam.forEach(f => {
+                console.log('Familiar:', f.nombre, f.apellido, f.tipo, 'familia_id:', f.familia_id);
+                let edadInfo = '';
+                let fechaNacInfo = 'N/A';
+                if (f.fecha_nacimiento) {
+                    const edad = calcularEdadDesdeFecha(f.fecha_nacimiento);
+                    edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                    fechaNacInfo = f.fecha_nacimiento;
+                } else if (f.edad) {
+                    edadInfo = `${f.edad} años`;
+                }
+
+                let detalleExtra = '';
+                // Si es cónyuge, mostrar CI siempre
+                if (f.tipo === 'conyuge') {
+                    if (f.habilitado) {
+                        detalleExtra = `<span style="color: #10b981; font-weight: 600;"> | CI: ${f.ci || 'N/A'}</span>`;
+                    } else {
+                        detalleExtra = `<span style="color: var(--text-muted); font-weight: 600;"> | CI: ${f.ci || 'N/A'}</span>`;
+                    }
+                }
+
+                familiaHtml += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: white;">${f.nombre} ${f.apellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(${f.tipo})</span>
+                            </div>
+                            <div style="color: var(--accent-color); font-weight: 500;">
+                                ${edadInfo}${detalleExtra}
+                            </div>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                            Fecha Nacimiento: ${fechaNacInfo}
+                        </div>
+                    </div>
+                `;
+            });
         }
-    } else {
-        // Es adherente, buscar su titular
-        if (socio.familia_id) {
-            const { data: tit } = await supabaseClient.from('socios').select('nombre, apellido').eq('id', socio.familia_id).single();
-            if (tit) familiaTexto = `Titular: ${tit.nombre} ${tit.apellido}`;
-        }
+    }
+
+    if (!familiaHtml) {
+        familiaHtml = '<span style="color: var(--text-muted);">Sin familiares registrados</span>';
     }
 
     document.getElementById('admin-busq-ci').textContent = socio.ci || 'N/A';
     document.getElementById('admin-busq-nombre').textContent = `${socio.nombre} ${socio.apellido}`.trim();
     document.getElementById('admin-busq-tipo').textContent = socio.tipo;
+    document.getElementById('admin-busq-fecha-nac').textContent = fechaNacTexto;
+    document.getElementById('admin-busq-edad').textContent = edadTexto;
     document.getElementById('admin-busq-equipo').textContent = equipoTexto;
     document.getElementById('admin-busq-estado').textContent = socio.habilitado ? 'Habilitado' : 'Deshabilitado';
-    document.getElementById('admin-busq-familia').textContent = familiaTexto || 'Sin familiares registrados';
+    document.getElementById('admin-busq-conyuge-socio').textContent = conyugeSocioTexto;
+    document.getElementById('admin-busq-familia').innerHTML = familiaHtml;
     resultado.style.display = 'block';
 }
 

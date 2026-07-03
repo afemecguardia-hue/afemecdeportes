@@ -21,7 +21,7 @@
 <body>
     <div class="card">
         <h2>Importar CSV de Socios a Supabase</h2>
-        <p>Selecciona el archivo <strong>SOCIOS ACTIVOS UNIFICADOS 17.06.csv</strong></p>
+        <p>Selecciona el archivo <strong>SOCIOS ACTIVOS UNIFICADOS 17.06 CON FECHAS.csv</strong></p>
         <input type="file" id="csvFile" accept=".csv">
         <button id="btnImport" onclick="importar()">Importar</button>
         <div id="status"></div>
@@ -58,34 +58,85 @@
 
             // ---- PARSEAR ----
             const titulares = new Map();
-            const conyuges = [], hijos = [], padres = [];
+            const conyuges = [], hijos = [];
+            let conyugesConCI = 0, hijosConCI = 0;
 
             for (const line of dataLines) {
                 const r = parseCSVLine(line);
                 if (r.length < 19) continue;
                 const ci = cleanNum(r[0]), nom = r[1].trim(), ape = r[2].trim();
                 if (!ci && !nom) continue;
-                if (!titulares.has(ci)) titulares.set(ci, { ci, nombre: nom, apellido: ape });
+
+                // Extraer fechas de nacimiento usando índices fijos (basado en estructura del CSV)
+                // Columnas: 0-17 datos, 18=fecha titular, 19=fecha conyuge, 20=fecha hijo
+                const fechaTitular = r.length > 18 ? r[18].trim() : '';
+                const fechaConyuge = r.length > 19 ? r[19].trim() : '';
+                const fechaHijo = r.length > 20 ? r[20].trim() : '';
+
+                // Función para limpiar fechas inválidas
+                const limpiarFecha = (f) => {
+                    if (!f || f === '-   -' || f === '-' || f === '0' || f === '') return null;
+                    // Validar formato de fecha yyyy-mm-dd
+                    if (f.match(/^\d{4}-\d{2}-\d{2}$/)) return f;
+                    return null;
+                };
+
+                // Guardar fecha del titular para usarla en hijos
+                const fechaTitularLimpia = limpiarFecha(fechaTitular);
+                if (!titulares.has(ci)) {
+                    titulares.set(ci, { ci, nombre: nom, apellido: ape, fecha_nacimiento: fechaTitularLimpia });
+                } else {
+                    // Si ya existe, actualizar la fecha si la nueva es válida
+                    const existente = titulares.get(ci);
+                    if (fechaTitularLimpia) {
+                        existente.fecha_nacimiento = fechaTitularLimpia;
+                        titulares.set(ci, existente);
+                    }
+                }
                 const cNom = r[5].trim();
-                if (cNom && cNom !== '0') conyuges.push({ ci_titular: ci, nombre: cNom, apellido: r[6].trim() || '' });
+                const cCi = cleanNum(r[4]); // Cédula del cónyuge
+                const fechaConyugeLimpia = limpiarFecha(fechaConyuge);
+                if (cNom && cNom !== '0') {
+                    conyuges.push({ ci_titular: ci, ci: cCi, nombre: cNom, apellido: r[6].trim() || '', fecha_nacimiento: fechaConyugeLimpia });
+                    if (cCi && cCi !== '0' && cCi !== '') conyugesConCI++;
+                }
                 const hNom = r[17].trim();
-                if (hNom && hNom !== '0') hijos.push({ ci_titular: ci, ci: cleanNum(r[16]), nombre: hNom, apellido: r[18].trim() || '' });
-                const pNom = r[8].trim();
-                if (pNom && pNom !== '0') padres.push({ ci_titular: ci, nombre: pNom, apellido: r[9].trim() || '', ci: cleanNum(r[10]), tipo: 'padre' });
-                const mNom = r[12].trim();
-                if (mNom && mNom !== '0') padres.push({ ci_titular: ci, nombre: mNom, apellido: r[13].trim() || '', ci: cleanNum(r[14]), tipo: 'madre' });
+                const hCi = cleanNum(r[16]); // Cédula del hijo
+                // Los hijos usan la fecha de nacimiento del titular
+                if (hNom && hNom !== '0') {
+                    hijos.push({ ci_titular: ci, ci: hCi, nombre: hNom, apellido: r[18].trim() || '', fecha_nacimiento: fechaTitularLimpia });
+                    if (hCi && hCi !== '0' && hCi !== '') hijosConCI++;
+                }
             }
 
-            addLog(`Parseo: ${titulares.size} titulares, ${conyuges.length} cónyuges, ${hijos.length} hijos, ${padres.length} padres`);
+            addLog(`Parseo: ${titulares.size} titulares, ${conyuges.length} cónyuges (${conyugesConCI} con CI), ${hijos.length} hijos (${hijosConCI} con CI)`);
 
-            // ---- INSERTAR TITULARES ----
-            addLog('Insertando titulares...');
+            // Mostrar algunos ejemplos de fechas para depuración
+            let count = 0;
+            for (const [ci, t] of titulares) {
+                if (count < 5) {
+                    addLog(`Ejemplo titular ${ci}: ${t.nombre} ${t.apellido}, fecha_nacimiento: ${t.fecha_nacimiento}`);
+                    count++;
+                }
+            }
+
+            // ---- UPSERT TITULARES (INSERT o UPDATE si existe) ----
+            addLog('Upsert titulares...');
             const arrT = Array.from(titulares.values());
             const ciToId = new Map();
             const B = 200;
             for (let i = 0; i < arrT.length; i += B) {
-                const batch = arrT.slice(i, i + B).map(t => ({ ci: t.ci, nombre: t.nombre, apellido: t.apellido, tipo: 'titular' }));
-                const { data, error } = await supa.from('socios').insert(batch).select('id, ci');
+                const batch = arrT.slice(i, i + B).map(t => ({ 
+                    ci: t.ci, 
+                    nombre: t.nombre, 
+                    apellido: t.apellido, 
+                    tipo: 'titular',
+                    fecha_nacimiento: t.fecha_nacimiento || null
+                }));
+                const { data, error } = await supa.from('socios').upsert(batch, { 
+                    onConflict: 'ci',
+                    ignoreDuplicates: false
+                }).select('id, ci');
                 if (error) { addLog(`Error lote ${i}: ${error.message}`); continue; }
                 if (data) data.forEach(d => ciToId.set(d.ci, d.id));
                 addLog(`  Titulares: ${Math.min(i + B, arrT.length)}/${arrT.length}`);
@@ -110,40 +161,95 @@
                 addLog(`  ${ciToId.size} titulares actualizados`);
             }
 
-            // ---- INSERTAR FAMILIARES (usando mapa ci->id, sin SELECTs) ----
-            async function insertarLote(lista, tabla, mapper) {
+            // ---- UPSERT FAMILIARES (INSERT o UPDATE si existe ci) ----
+            async function upsertFamiliares(lista, tipo) {
                 if (!lista.length) return;
-                for (let i = 0; i < lista.length; i += B) {
-                    const batch = [];
-                    for (const item of lista.slice(i, i + B)) {
-                        const tid = ciToId.get(item.ci_titular);
-                        if (tid) batch.push(mapper(item, tid));
+                
+                // Separar por si tienen ci o no
+                const conCi = [];
+                const sinCi = [];
+                
+                for (const item of lista) {
+                    const tid = ciToId.get(item.ci_titular);
+                    if (tid) {
+                        // Verificar si tiene ci válido (no vacío, no 0, no null)
+                        if (item.ci && item.ci !== '0' && item.ci !== '' && item.ci !== 0) {
+                            conCi.push({ ...item, familia_id: tid });
+                        } else {
+                            sinCi.push({ ...item, familia_id: tid });
+                        }
                     }
-                    if (batch.length) {
-                        const { error } = await supa.from(tabla).insert(batch);
-                        if (error) addLog(`Error ${tabla}: ${error.message}`);
+                }
+                
+                // Procesar los que tienen ci con UPSERT (deduplicando por ci)
+                if (conCi.length > 0) {
+                    // Deduplicar por ci antes de UPSERT
+                    const uniqueMap = new Map();
+                    for (const item of conCi) {
+                        if (!uniqueMap.has(item.ci)) {
+                            uniqueMap.set(item.ci, item);
+                        }
+                    }
+                    const uniqueConCi = Array.from(uniqueMap.values());
+                    
+                    for (let i = 0; i < uniqueConCi.length; i += B) {
+                        const batch = uniqueConCi.slice(i, i + B).map(item => ({
+                            ci: item.ci,
+                            nombre: item.nombre,
+                            apellido: item.apellido,
+                            tipo: tipo,
+                            familia_id: item.familia_id,
+                            fecha_nacimiento: item.fecha_nacimiento || null
+                        }));
+                        
+                        const { error } = await supa.from('socios').upsert(batch, {
+                            onConflict: 'ci',
+                            ignoreDuplicates: false
+                        });
+                        if (error) addLog(`Error upsert ${tipo}: ${error.message}`);
+                    }
+                }
+                
+                // Procesar los que no tienen ci con DELETE + INSERT por familia
+                if (sinCi.length > 0) {
+                    const familiaIds = [...new Set(sinCi.map(b => b.familia_id))];
+                    for (const fid of familiaIds) {
+                        await supa.from('socios')
+                            .delete()
+                            .eq('familia_id', fid)
+                            .eq('tipo', tipo);
+                    }
+                    
+                    for (let i = 0; i < sinCi.length; i += B) {
+                        const batch = sinCi.slice(i, i + B).map(item => ({
+                            nombre: item.nombre,
+                            apellido: item.apellido,
+                            tipo: tipo,
+                            familia_id: item.familia_id,
+                            fecha_nacimiento: item.fecha_nacimiento || null
+                        }));
+                        
+                        const { error } = await supa.from('socios').insert(batch);
+                        if (error) addLog(`Error insertar ${tipo} sin ci: ${error.message}`);
                     }
                 }
             }
 
-            addLog('Insertando cónyuges...');
-            await insertarLote(conyuges, 'socios', (c, tid) => ({ nombre: c.nombre, apellido: c.apellido, tipo: 'conyuge', familia_id: tid }));
+            addLog('Upsert cónyuges...');
+            await upsertFamiliares(conyuges, 'conyuge');
             addLog(`  ${conyuges.length} cónyuges`);
 
-            addLog('Insertando hijos...');
-            await insertarLote(hijos, 'socios', (h, tid) => ({ ci: h.ci, nombre: h.nombre, apellido: h.apellido, tipo: 'hijo', familia_id: tid }));
+            addLog('Upsert hijos...');
+            await upsertFamiliares(hijos, 'hijo');
             addLog(`  ${hijos.length} hijos`);
 
-            addLog('Insertando padres...');
-            await insertarLote(padres, 'padres_titular', (p, tid) => ({ titular_id: tid, nombre: p.nombre, apellido: p.apellido, ci: p.ci, tipo: p.tipo }));
-            addLog(`  ${padres.length} padres`);
-
             addLog('--- IMPORTACIÓN COMPLETADA ---');
+            addLog(`Estadísticas finales: ${conyugesConCI} cónyuges con CI, ${hijosConCI} hijos con CI`);
             document.getElementById('stats').style.display = 'grid';
             document.getElementById('s-titulares').textContent = titulares.size;
-            document.getElementById('s-conyuges').textContent = conyuges.length;
-            document.getElementById('s-hijos').textContent = hijos.length;
-            document.getElementById('s-padres').textContent = padres.length;
+            document.getElementById('s-conyuges').textContent = `${conyuges.length} (${conyugesConCI} con CI)`;
+            document.getElementById('s-hijos').textContent = `${hijos.length} (${hijosConCI} con CI)`;
+            document.getElementById('s-padres').textContent = '0';
             btn.disabled = false;
         }
 
