@@ -221,6 +221,23 @@
 
                 <div id="insc-formulario-adherente" class="discipline-control">
                     <h3 style="margin-bottom: 1rem; font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Cargar Datos del Atleta (Adherente)</h3>
+                    
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="checkbox" id="insc-titular-como-atleta" onchange="seleccionarTitularComoAtleta()" style="width:18px; height:18px;">
+                            <span>Inscribir al socio titular como atleta</span>
+                        </label>
+                        <small style="color:var(--text-muted); margin-left:2rem;">Al marcar esta opción, se cargarán automáticamente los datos del titular</small>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label for="insc-familiar-selector">Seleccionar Familiar (opcional)</label>
+                        <select id="insc-familiar-selector" class="form-input" onchange="seleccionarFamiliar()">
+                            <option value="">-- Ingresar datos manualmente --</option>
+                        </select>
+                        <small style="color:var(--text-muted);">Selecciona un familiar para autocompletar los datos</small>
+                    </div>
+                    
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
                         <div class="form-group">
                             <label for="insc-atleta-nombre">Nombre y Apellido del Atleta</label>
@@ -506,16 +523,22 @@
             <div id="admin-tab-atletas" class="admin-tab-content">
                 <h3>Control de Atletas Inscriptos</h3>
                 <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
-                    <div class="kpi-card" style="flex:1; min-width:180px; padding:1rem; background:linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);">
+                    <div class="kpi-card" style="flex:1; min-width:200px; padding:1rem; background:linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);">
                         <div class="kpi-details">
                             <span class="kpi-label">TOTAL ADHERENTES</span>
                             <strong class="kpi-value" style="font-size:1.5rem;" id="admin-total-adherentes">0</strong>
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                                <span id="admin-adherentes-conyuges">0</span> cónyuges · <span id="admin-adherentes-hijos">0</span> hijos
+                            </div>
                         </div>
                     </div>
-                    <div class="kpi-card" style="flex:1; min-width:180px; padding:1rem; background:linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                    <div class="kpi-card" style="flex:1; min-width:200px; padding:1rem; background:linear-gradient(135deg, #059669 0%, #10b981 100%);">
                         <div class="kpi-details">
                             <span class="kpi-label">TOTAL ATLETAS INSCRIPTOS</span>
                             <strong class="kpi-value" style="font-size:1.5rem;" id="admin-total-atletas">0</strong>
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                                <span id="admin-atletas-titular">0</span> titulares · <span id="admin-atletas-externos">0</span> invitados · <span id="admin-atletas-conyuges">0</span> cónyuges · <span id="admin-atletas-hijos">0</span> hijos
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -643,11 +666,18 @@
                         <div class="info-item"><label>Edad</label><span id="admin-busq-edad">-</span></div>
                         <div class="info-item"><label>Equipo</label><span id="admin-busq-equipo">-</span></div>
                         <div class="info-item"><label>Estado</label><span id="admin-busq-estado">-</span></div>
-                        <div class="info-item"><label>Cónyuge Socio</label><span id="admin-busq-conyuge-socio">-</span></div>
                     </div>
                     <div style="margin-top: 1rem;">
-                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 0.5rem; display: block;">Familiares</label>
+                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 0.5rem; display: block;">Cónyuge</label>
+                        <div id="admin-busq-conyuge" style="padding: 0.75rem; background: rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px); min-height: 40px;">-</div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 0.5rem; display: block;">Adherentes</label>
                         <div id="admin-busq-familia" style="padding: 0.75rem; background: rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px); min-height: 40px;">-</div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-color); margin-bottom: 0.5rem; display: block;">Atletas Inscriptos</label>
+                        <div id="admin-busq-atletas" style="padding: 0.75rem; background: rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px); min-height: 40px;">-</div>
                     </div>
                 </div>
             </div>
@@ -1124,6 +1154,7 @@
             });
         }
     })();
+    </script>
 <!-- ========== MODAL PERFIL DE EQUIPO ========== -->
 <div id="modal-perfil-equipo" class="modal-perfil" style="display:none;">
     <div class="modal-perfil-backdrop" onclick="cerrarPerfilEquipo()"></div>

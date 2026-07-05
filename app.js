@@ -190,15 +190,46 @@ async function buscarSocioInscripcion() {
     const ci = limpiarCI(document.getElementById('insc-ci').value);
     if (!ci) return alert('Ingresá un número de CI');
 
-    const { data: socios, error } = await supabaseClient
-        .from('socios')
+    // Buscar en titulares
+    let { data: titular } = await supabaseClient
+        .from('titulares')
         .select('*')
         .eq('ci', ci)
-        .limit(1);
-
-    const socio = socios && socios[0];
+        .maybeSingle();
+    
+    let socio = null;
+    let tipo = 'titular';
+    
+    if (titular) {
+        socio = titular;
+    } else {
+        // Buscar en cónyuges
+        let { data: conyuge } = await supabaseClient
+            .from('conyuges')
+            .select('*')
+            .eq('ci', ci)
+            .maybeSingle();
+        
+        if (conyuge) {
+            socio = conyuge;
+            tipo = 'conyuge';
+        } else {
+            // Buscar en hijos
+            let { data: hijo } = await supabaseClient
+                .from('hijos')
+                .select('*')
+                .eq('ci', ci)
+                .maybeSingle();
+            
+            if (hijo) {
+                socio = hijo;
+                tipo = 'hijo';
+            }
+        }
+    }
+    
     const resultado = document.getElementById('insc-resultado');
-    if (error || !socio) {
+    if (!socio) {
         resultado.style.display = 'none';
         alert('Socio no encontrado');
         return;
@@ -212,22 +243,113 @@ async function buscarSocioInscripcion() {
     // Guardamos el id del socio en data attributes
     resultado.dataset.socioId = socio.id;
     resultado.dataset.socioCi = socio.ci;
+    resultado.dataset.titularOriginalId = socio.id; // Guardar ID del titular original
+    
+    // Guardar datos del titular para autocompletado
+    resultado.dataset.titularNombre = socio.nombre || '';
+    resultado.dataset.titularApellido = socio.apellido || '';
+    resultado.dataset.titularCi = socio.ci || '';
+    resultado.dataset.titularFechaNac = socio.fecha_nacimiento || '';
+    resultado.dataset.titularTelefono = socio.telefono || '';
 
     const nombreCompleto = `${socio.nombre} ${socio.apellido}`.trim();
     document.getElementById('insc-nombre').textContent = nombreCompleto;
     document.getElementById('insc-ci-label').textContent = socio.ci;
     document.getElementById('insc-estado-label').textContent = socio.habilitado ? 'Habilitado' : 'Deshabilitado';
 
-    // Contar atletas ya registrados bajo este titular
-    const { data: familiaIds } = await supabaseClient
-        .from('socios')
-        .select('id')
-        .eq('familia_id', socio.id);
-    const ids = [socio.id, ...(familiaIds || []).map(f => f.id)];
+    // Cargar cónyuges e hijos del titular para el selector
+    const familiarSelector = document.getElementById('insc-familiar-selector');
+    familiarSelector.innerHTML = '<option value="">-- Ingresar datos manualmente --</option>';
+    
+    if (tipo === 'titular') {
+        // Cargar cónyuges (desde tabla conyuges)
+        const { data: conyuges } = await supabaseClient
+            .from('conyuges')
+            .select('*')
+            .eq('titular_id', socio.id);
+        
+        // También buscar en conyuge_relacion (para titulares que son cónyuges entre sí)
+        const { data: relacionesConyuge } = await supabaseClient
+            .from('conyuge_relacion')
+            .select('*')
+            .or(`titular1_id.eq.${socio.id},titular2_id.eq.${socio.id}`);
+        
+        // Obtener IDs de los cónyuges titulares
+        const conyugeTitularIds = new Set();
+        if (relacionesConyuge) {
+            relacionesConyuge.forEach(r => {
+                if (r.titular1_id === socio.id) conyugeTitularIds.add(r.titular2_id);
+                if (r.titular2_id === socio.id) conyugeTitularIds.add(r.titular1_id);
+            });
+        }
+        
+        // Cargar datos de los titulares que son cónyuges
+        let conyugesTitulares = [];
+        if (conyugeTitularIds.size > 0) {
+            const { data: titularesConyuges } = await supabaseClient
+                .from('titulares')
+                .select('*')
+                .in('id', Array.from(conyugeTitularIds));
+            conyugesTitulares = titularesConyuges || [];
+        }
+        
+        if (conyuges && conyuges.length) {
+            for (const c of conyuges) {
+                const { count: atletaCount } = await supabaseClient
+                    .from('atletas')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('socio_id', c.id);
+                const inscrito = (atletaCount || 0) > 0;
+                const label = inscrito ? `✓ ${c.nombre} ${c.apellido} (Cónyuge - Ya inscripto)` : `${c.nombre} ${c.apellido} (Cónyuge)`;
+                familiarSelector.innerHTML += `<option value="conyuge|${c.id}" data-nombre="${c.nombre}" data-apellido="${c.apellido}" data-ci="${c.ci}" data-fecha="${c.fecha_nacimiento || ''}">${escHtml(label)}</option>`;
+            }
+        }
+        
+        // Agregar cónyuges que son titulares
+        if (conyugesTitulares && conyugesTitulares.length) {
+            for (const c of conyugesTitulares) {
+                const { count: atletaCount } = await supabaseClient
+                    .from('atletas')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('ci_atleta', c.ci);
+                const inscrito = (atletaCount || 0) > 0;
+                const label = inscrito ? `✓ ${c.nombre} ${c.apellido} (Cónyuge - Ya inscripto)` : `${c.nombre} ${c.apellido} (Cónyuge)`;
+                familiarSelector.innerHTML += `<option value="conyuge|${c.id}" data-nombre="${c.nombre}" data-apellido="${c.apellido}" data-ci="${c.ci}" data-fecha="${c.fecha_nacimiento || ''}">${escHtml(label)}</option>`;
+            }
+        }
+        
+        // Cargar hijos
+        const { data: hijosRel } = await supabaseClient
+            .from('hijo_titular')
+            .select('hijo_id')
+            .eq('titular_id', socio.id);
+        
+        if (hijosRel && hijosRel.length) {
+            const hijoIds = hijosRel.map(h => h.hijo_id);
+            const { data: hijos } = await supabaseClient
+                .from('hijos')
+                .select('*')
+                .in('id', hijoIds);
+            
+            if (hijos && hijos.length) {
+                for (const h of hijos) {
+                    const { count: atletaCount } = await supabaseClient
+                        .from('atletas')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('socio_id', h.id);
+                    const inscrito = (atletaCount || 0) > 0;
+                    const label = inscrito ? `✓ ${h.nombre} ${h.apellido} (Hijo - Ya inscripto)` : `${h.nombre} ${h.apellido} (Hijo)`;
+                    familiarSelector.innerHTML += `<option value="hijo|${h.id}" data-nombre="${h.nombre}" data-apellido="${h.apellido}" data-ci="${h.ci}" data-fecha="${h.fecha_nacimiento || ''}">${escHtml(label)}</option>`;
+                }
+            }
+        }
+    }
+
+    // Contar atletas ya registrados con este CI
     const { count: atletasCount, error: errCount } = await supabaseClient
         .from('atletas')
         .select('*', { count: 'exact', head: true })
-        .in('socio_id', ids);
+        .eq('socio_id', socio.id);
 
     const cupoMaximo = 6;
     const usados = atletasCount || 0;
@@ -279,6 +401,106 @@ async function buscarSocioInscripcion() {
     resultado.style.display = 'block';
 }
 
+function seleccionarTitularComoAtleta() {
+    const checkbox = document.getElementById('insc-titular-como-atleta');
+    const resultado = document.getElementById('insc-resultado');
+    
+    if (checkbox.checked) {
+        // Autocompletar con datos del titular
+        const nombre = resultado.dataset.titularNombre || '';
+        const apellido = resultado.dataset.titularApellido || '';
+        const ci = resultado.dataset.titularCi || '';
+        const fechaNac = resultado.dataset.titularFechaNac || '';
+        const telefono = resultado.dataset.titularTelefono || '';
+        
+        document.getElementById('insc-atleta-nombre').value = `${nombre} ${apellido}`.trim();
+        document.getElementById('insc-atleta-ci').value = ci;
+        document.getElementById('insc-atleta-fecha-nac').value = fechaNac;
+        document.getElementById('insc-atleta-telefono').value = telefono;
+        
+        // Calcular edad y categoría automáticamente
+        if (fechaNac) {
+            calcularCategoriaAutomatica(fechaNac);
+            
+            // Filtrar equipos según la edad calculada
+            const edad = calcularEdadDesdeFecha(fechaNac);
+            if (edad >= 0) {
+                filtrarEquiposPorCategoria(edad);
+            }
+        }
+        
+        // Deshabilitar selector de familiares
+        document.getElementById('insc-familiar-selector').disabled = true;
+        document.getElementById('insc-familiar-selector').value = '';
+    } else {
+        // Limpiar campos
+        document.getElementById('insc-atleta-nombre').value = '';
+        document.getElementById('insc-atleta-ci').value = '';
+        document.getElementById('insc-atleta-fecha-nac').value = '';
+        document.getElementById('insc-atleta-telefono').value = '';
+        document.getElementById('insc-atleta-edad-label').textContent = '---';
+        document.getElementById('insc-atleta-categoria-label').textContent = '---';
+        document.getElementById('insc-categoria-info').textContent = '';
+        document.getElementById('insc-categoria-checkboxes').innerHTML = '';
+        restaurarTodosEquipos();
+        
+        // Habilitar selector de familiares
+        document.getElementById('insc-familiar-selector').disabled = false;
+    }
+}
+
+function seleccionarFamiliar() {
+    const selector = document.getElementById('insc-familiar-selector');
+    const selectedOption = selector.options[selector.selectedIndex];
+    
+    if (!selectedOption || !selectedOption.value) {
+        // Limpiar campos si se selecciona "Ingresar datos manualmente"
+        document.getElementById('insc-atleta-nombre').value = '';
+        document.getElementById('insc-atleta-ci').value = '';
+        document.getElementById('insc-atleta-fecha-nac').value = '';
+        document.getElementById('insc-atleta-telefono').value = '';
+        document.getElementById('insc-atleta-edad-label').textContent = '---';
+        document.getElementById('insc-atleta-categoria-label').textContent = '---';
+        document.getElementById('insc-categoria-info').textContent = '';
+        document.getElementById('insc-categoria-checkboxes').innerHTML = '';
+        restaurarTodosEquipos();
+        
+        // Restaurar socio_id al titular original
+        const resultado = document.getElementById('insc-resultado');
+        const titularOriginalId = resultado.dataset.titularOriginalId;
+        if (titularOriginalId) {
+            resultado.dataset.socioId = titularOriginalId;
+        }
+        return;
+    }
+    
+    // Autocompletar campos con datos del familiar
+    const nombre = selectedOption.dataset.nombre || '';
+    const apellido = selectedOption.dataset.apellido || '';
+    const ci = selectedOption.dataset.ci || '';
+    const fechaNac = selectedOption.dataset.fecha || '';
+    
+    document.getElementById('insc-atleta-nombre').value = `${nombre} ${apellido}`.trim();
+    document.getElementById('insc-atleta-ci').value = ci;
+    document.getElementById('insc-atleta-fecha-nac').value = fechaNac;
+    
+    // Calcular edad y categoría automáticamente
+    if (fechaNac) {
+        calcularCategoriaAutomatica(fechaNac);
+        
+        // Filtrar equipos según la edad calculada
+        const edad = calcularEdadDesdeFecha(fechaNac);
+        if (edad >= 0) {
+            filtrarEquiposPorCategoria(edad);
+        }
+    }
+    
+    // Actualizar socio_id al del familiar seleccionado
+    const resultado = document.getElementById('insc-resultado');
+    const [tipo, id] = selectedOption.value.split('|');
+    resultado.dataset.socioId = id;
+}
+
 function calcularEdadDesdeFecha(fechaNac) {
     if (!fechaNac) return -1;
     const hoy = new Date();
@@ -313,6 +535,8 @@ function calcularCategoriaAutomatica(fechaVal) {
     if (catsMatch.length > 0 && cant !== undefined) {
         const todasNombres = catsMatch.map(c => c.nombre).join(', ');
         infoEl.innerHTML = `Categorías habilitadas: <strong>${todasNombres}</strong> — <strong>${cant}</strong> equipo${cant !== 1 ? 's' : ''} disponible${cant !== 1 ? 's' : ''}`;
+    } else if (catsMatch.length === 0) {
+        infoEl.innerHTML = '<span style="color:#ef4444;">⚠️ No cumple con el rango de edad requerido para ninguna categoría</span>';
     } else if (cant === 0) {
         infoEl.innerHTML = 'Sin equipos asignados a las categorías habilitadas para esta edad';
     } else {
@@ -411,6 +635,58 @@ async function inscribirAtleta() {
         if (cat) catsSeleccionadas.push(cat);
     });
 
+    const catsNombre = catsSeleccionadas.map(c => c.nombre).join(', ');
+
+    // Verificar si el atleta ya está inscrito por CI
+    const { data: atletaExistente } = await supabaseClient
+        .from('atletas')
+        .select('id, equipo_id, ci_atleta')
+        .eq('ci_atleta', atletaCi);
+    
+    if (atletaExistente && atletaExistente.length > 0) {
+        // Verificar si alguno está en otro equipo
+        const atletaEnOtroEquipo = atletaExistente.find(a => String(a.equipo_id) !== String(equipoId));
+        if (atletaEnOtroEquipo) {
+            return alert(`El atleta con CI ${atletaCi} ya está inscrito en otro equipo. Un atleta solo puede inscribirse en un equipo.`);
+        }
+        
+        // Si está en el mismo equipo, verificar si ya está inscrito en las categorías seleccionadas
+        const categoriasIdsExistentes = atletaExistente.map(c => c.categoria_id);
+        const categoriasYaInscriptas = catsSeleccionadas.filter(c => categoriasIdsExistentes.includes(c.id));
+        
+        if (categoriasYaInscriptas.length > 0) {
+            const nombresCategorias = categoriasYaInscriptas.map(c => c.nombre).join(', ');
+            return alert(`El atleta ya está inscrito en: ${nombresCategorias}. No se puede inscribir más de una vez en la misma categoría.`);
+        }
+    }
+
+    // Determinar tipo de atleta
+    let tipoAtleta = 'invitado';
+    const checkboxTitular = document.getElementById('insc-titular-como-atleta');
+    const familiarSelector = document.getElementById('insc-familiar-selector');
+    
+    if (checkboxTitular && checkboxTitular.checked) {
+        tipoAtleta = 'titular';
+    } else if (familiarSelector && familiarSelector.value) {
+        const [tipo, id] = familiarSelector.value.split('|');
+        if (tipo === 'conyuge') tipoAtleta = 'conyuge';
+        else if (tipo === 'hijo') tipoAtleta = 'hijo';
+    }
+
+    // Verificar que las categorías seleccionadas estén asignadas al equipo
+    for (const cat of catsSeleccionadas) {
+        const { data: categoriaEquipo } = await supabaseClient
+            .from('categoria_equipos')
+            .select('*')
+            .eq('categoria_id', cat.id)
+            .eq('equipo_id', equipoId)
+            .maybeSingle();
+        
+        if (!categoriaEquipo) {
+            return alert(`La categoría "${cat.nombre}" no está asignada al equipo seleccionado. Por favor, selecciona una categoría válida para este equipo.`);
+        }
+    }
+
     // Verificar cupo por categoría
     for (const cat of catsSeleccionadas) {
         const maxPorCat = cat.jugadores_por_equipo || 0;
@@ -426,81 +702,111 @@ async function inscribirAtleta() {
         }
     }
 
-    // Registrar atleta en socios (una sola vez)
-    const catsNombre = catsSeleccionadas.map(c => c.nombre).join(', ');
-    const socioInsert = {
-        ci: atletaCi,
-        nombre: atletaNombre,
-        apellido: '',
-        tipo: 'adherente',
-        familia_id: titularId,
-        edad: atletaEdad,
-        categoria: catsNombre,
-        habilitado: true
-    };
-    if (atletaFechaNac) socioInsert.fecha_nacimiento = atletaFechaNac;
-    if (atletaTelefono) socioInsert.telefono = atletaTelefono;
-
-    let nuevoSocio;
-    let errSocio;
-
-    ({ data: nuevoSocio, error: errSocio } = await supabaseClient
-        .from('socios')
-        .insert(socioInsert)
-        .select()
-        .single());
-
-    if (errSocio && errSocio.message && errSocio.message.includes('column')) {
-        delete socioInsert.fecha_nacimiento;
-        delete socioInsert.telefono;
-        ({ data: nuevoSocio, error: errSocio } = await supabaseClient
-            .from('socios')
-            .insert(socioInsert)
-            .select()
-            .single());
-        if (errSocio) return alert('Error al registrar: ' + errSocio.message);
-    } else if (errSocio) {
-        return alert('Error al registrar datos del atleta: ' + errSocio.message);
-    }
-
-    if (errSocio) {
-        return alert('Error al registrar datos del atleta: ' + errSocio.message);
-    }
-
     // Inscribir en atletas para cada categoría seleccionada
     for (const cat of catsSeleccionadas) {
         const { error: errAtleta } = await supabaseClient
             .from('atletas')
             .insert({
-                socio_id: nuevoSocio.id,
+                socio_id: titularId,
                 equipo_id: equipoId,
-                categoria_id: cat.id
+                categoria_id: cat.id,
+                nombre_atleta: atletaNombre,
+                apellido_atleta: '',
+                ci_atleta: atletaCi,
+                fecha_nacimiento_atleta: atletaFechaNac,
+                telefono_atleta: atletaTelefono,
+                tipo_atleta: tipoAtleta
             });
         if (errAtleta) {
-            await supabaseClient.from('socios').delete().eq('id', nuevoSocio.id);
             if (errAtleta?.code === '23505') return alert(`El atleta ya está inscripto en ${cat.nombre} para este equipo`);
             return alert('Error al inscribir en ' + cat.nombre + ': ' + errAtleta.message);
         }
     }
 
     alert(`✅ Atleta inscripto correctamente en ${catsSeleccionadas.length} categoría(s): ${catsNombre}`);
-    document.getElementById('insc-resultado').style.display = 'none';
-    document.getElementById('insc-ci').value = '';
+    
+    // Limpiar campos
+    document.getElementById('insc-atleta-nombre').value = '';
+    document.getElementById('insc-atleta-ci').value = '';
+    document.getElementById('insc-atleta-fecha-nac').value = '';
+    document.getElementById('insc-atleta-telefono').value = '';
+    document.getElementById('insc-atleta-edad-label').textContent = '---';
+    document.getElementById('insc-atleta-categoria-label').textContent = '---';
+    document.getElementById('insc-categoria-info').textContent = '';
+    document.getElementById('insc-categoria-checkboxes').innerHTML = '';
+    document.getElementById('insc-equipo').value = '';
+    
+    // Limpiar checkbox del titular y habilitar selector de familiares
+    const checkboxTitularLimpieza = document.getElementById('insc-titular-como-atleta');
+    if (checkboxTitularLimpieza) {
+        checkboxTitularLimpieza.checked = false;
+        document.getElementById('insc-familiar-selector').disabled = false;
+    }
+    document.getElementById('insc-familiar-selector').value = '';
+    
+    // Actualizar contador de atletas
+    const { count: atletasCount } = await supabaseClient
+        .from('atletas')
+        .select('*', { count: 'exact', head: true })
+        .eq('socio_id', titularId);
+    document.getElementById('insc-cupo-contador').textContent = `${atletasCount || 0} / 6`;
 }
 
 // ============================
 // VEEDOR (búsqueda + falta)
 // ============================
 async function buscarJugador() {
+    console.log('buscarJugador ejecutada');
     const ci = limpiarCI(document.getElementById('veedor-ci').value);
-    const { data: socios, error } = await supabaseClient
-        .from('socios')
-        .select('id, nombre, apellido, tipo')
+    console.log('Buscando jugador con CI:', ci);
+    
+    // Buscar en titulares
+    let { data: titular } = await supabaseClient
+        .from('titulares')
+        .select('id, nombre, apellido')
         .eq('ci', ci)
-        .limit(1);
-
-    const socio = socios && socios[0];
-    if (error || !socio) {
+        .maybeSingle();
+    
+    console.log('Titular encontrado:', titular);
+    
+    let socio = null;
+    let tipo = 'titular';
+    
+    if (titular) {
+        socio = titular;
+    } else {
+        // Buscar en cónyuges
+        let { data: conyuge } = await supabaseClient
+            .from('conyuges')
+            .select('id, nombre, apellido')
+            .eq('ci', ci)
+            .maybeSingle();
+        
+        console.log('Cónyuge encontrado:', conyuge);
+        
+        if (conyuge) {
+            socio = conyuge;
+            tipo = 'conyuge';
+        } else {
+            // Buscar en hijos
+            let { data: hijo } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido')
+                .eq('ci', ci)
+                .maybeSingle();
+            
+            console.log('Hijo encontrado:', hijo);
+            
+            if (hijo) {
+                socio = hijo;
+                tipo = 'hijo';
+            }
+        }
+    }
+    
+    console.log('Socio final:', socio, 'Tipo:', tipo);
+    
+    if (!socio) {
         alert('Jugador no encontrado');
         return;
     }
@@ -517,7 +823,7 @@ async function buscarJugador() {
     }
 
     const nombreCompleto = `${socio.nombre} ${socio.apellido}`.trim();
-    document.getElementById('nombre-encontrado').innerText = `${nombreCompleto} (${socio.tipo})`;
+    document.getElementById('nombre-encontrado').innerText = `${nombreCompleto} (${tipo})`;
     document.getElementById('resultado-busqueda').style.display = 'block';
 
     renderizarOpcionesFaltas();
@@ -565,14 +871,42 @@ async function cargarFalta() {
     const cfg = configFaltas.find(c => c.tipo === tipo);
     const monto = cfg ? cfg.monto : 0;
 
-    const { data: socios, error: err } = await supabaseClient
-        .from('socios')
+    // Buscar en titulares
+    let { data: titular } = await supabaseClient
+        .from('titulares')
         .select('id, nombre, apellido')
         .eq('ci', ci)
-        .limit(1);
-
-    const socio = socios && socios[0];
-    if (err || !socio) return alert('Jugador no encontrado');
+        .maybeSingle();
+    
+    let socio = null;
+    
+    if (titular) {
+        socio = titular;
+    } else {
+        // Buscar en cónyuges
+        let { data: conyuge } = await supabaseClient
+            .from('conyuges')
+            .select('id, nombre, apellido')
+            .eq('ci', ci)
+            .maybeSingle();
+        
+        if (conyuge) {
+            socio = conyuge;
+        } else {
+            // Buscar en hijos
+            let { data: hijo } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido')
+                .eq('ci', ci)
+                .maybeSingle();
+            
+            if (hijo) {
+                socio = hijo;
+            }
+        }
+    }
+    
+    if (!socio) return alert('Jugador no encontrado');
 
     const { data: atleta } = await supabaseClient
         .from('atletas')
@@ -644,16 +978,15 @@ async function cargarListadoSocios() {
     const tbody = document.getElementById('admin-socios-body');
     tbody.innerHTML = "<tr><td colspan='5'>Cargando...</td></tr>";
 
-    const { data: socios, error } = await supabaseClient
-        .from('socios')
+    const { data: titulares, error } = await supabaseClient
+        .from('titulares')
         .select('*')
-        .eq('tipo', 'titular')
         .order('apellido');
 
     if (error) return alert('Error: ' + error.message);
 
     tbody.innerHTML = '';
-    socios.forEach(s => {
+    titulares.forEach(s => {
         const tr = document.createElement('tr');
         tr.className = s.habilitado ? '' : 'row-disabled';
         tr.innerHTML = `
@@ -673,7 +1006,7 @@ async function cargarListadoSocios() {
 }
 
 async function toggleHabilitado(id, habilitado) {
-    const { error } = await supabaseClient.from('socios').update({ habilitado }).eq('id', id);
+    const { error } = await supabaseClient.from('titulares').update({ habilitado }).eq('id', id);
     if (error) return alert('Error: ' + error.message);
     cargarListadoSocios();
 }
@@ -1029,20 +1362,66 @@ async function cargarAdminAtletas() {
     document.getElementById('atletas-equipo-detalle').style.display = 'none';
     document.getElementById('atletas-categorias-container').style.display = 'block';
 
-    // Totals
-    const { count: adhCount } = await supabaseClient.from('socios').select('*', { count: 'exact', head: true }).in('tipo', ['conyuge', 'hijo', 'adherente']);
+    // Totals de adherentes (cónyuges e hijos)
+    const { count: conyugesCount } = await supabaseClient.from('conyuges').select('*', { count: 'exact', head: true });
+    const { count: hijosCount } = await supabaseClient.from('hijos').select('*', { count: 'exact', head: true });
+    const adhCount = (conyugesCount || 0) + (hijosCount || 0);
     const elAdh = document.getElementById('admin-total-adherentes');
     if (elAdh) elAdh.textContent = adhCount || 0;
+    
+    // Breakdown de adherentes
+    const elAdhConyuges = document.getElementById('admin-adherentes-conyuges');
+    if (elAdhConyuges) elAdhConyuges.textContent = conyugesCount || 0;
+    const elAdhHijos = document.getElementById('admin-adherentes-hijos');
+    if (elAdhHijos) elAdhHijos.textContent = hijosCount || 0;
 
-    const { count: atlCount } = await supabaseClient.from('atletas').select('*', { count: 'exact', head: true });
+    // Totals de atletas inscriptos (contar por CI único, no por filas)
+    const { data: atletas } = await supabaseClient.from('atletas').select('ci_atleta, tipo_atleta');
+    
+    // Usar Set para contar CI únicos
+    const ciUnicos = new Set();
+    atletas?.forEach(a => ciUnicos.add(a.ci_atleta));
+    const atlCount = ciUnicos.size || 0;
+    
     const elAtl = document.getElementById('admin-total-atletas');
     if (elAtl) elAtl.textContent = atlCount || 0;
+    
+    // Breakdown de atletas por tipo usando campo tipo_atleta (contar por CI único)
+    const ciPorTipo = {
+        titular: new Set(),
+        conyuge: new Set(),
+        hijo: new Set(),
+        invitado: new Set()
+    };
+    
+    if (atletas && atletas.length > 0) {
+        atletas.forEach(a => {
+            if (a.tipo_atleta === 'titular') ciPorTipo.titular.add(a.ci_atleta);
+            else if (a.tipo_atleta === 'conyuge') ciPorTipo.conyuge.add(a.ci_atleta);
+            else if (a.tipo_atleta === 'hijo') ciPorTipo.hijo.add(a.ci_atleta);
+            else ciPorTipo.invitado.add(a.ci_atleta); // 'invitado' o null
+        });
+    }
+    
+    const atletasTitular = ciPorTipo.titular.size;
+    const atletasInvitados = ciPorTipo.invitado.size;
+    const atletasConyuges = ciPorTipo.conyuge.size;
+    const atletasHijos = ciPorTipo.hijo.size;
+    
+    const elAtlTitular = document.getElementById('admin-atletas-titular');
+    if (elAtlTitular) elAtlTitular.textContent = atletasTitular;
+    const elAtlInvitados = document.getElementById('admin-atletas-externos');
+    if (elAtlInvitados) elAtlInvitados.textContent = atletasInvitados;
+    const elAtlConyuges = document.getElementById('admin-atletas-conyuges');
+    if (elAtlConyuges) elAtlConyuges.textContent = atletasConyuges;
+    const elAtlHijos = document.getElementById('admin-atletas-hijos');
+    if (elAtlHijos) elAtlHijos.textContent = atletasHijos;
 
     // Categorías → equipos → contadores
     const container = document.getElementById('atletas-categorias-container');
     container.innerHTML = '<p style="color:var(--text-muted);">Cargando...</p>';
 
-    const { data: atletas } = await supabaseClient.from('atletas').select('id, equipo_id, categoria_id, socio_id');
+    const { data: atletasDetalle } = await supabaseClient.from('atletas').select('id, equipo_id, categoria_id, socio_id, ci_atleta, tipo_atleta');
 
     let html = '';
     for (const cat of categoriasConfig) {
@@ -1056,13 +1435,17 @@ async function cargarAdminAtletas() {
             <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">`;
 
         for (const eq of equiposCat) {
-            const count = (atletas || []).filter(a => String(a.equipo_id) === String(eq.id) && a.categoria_id === cat.id).length;
+            const count = (atletasDetalle || []).filter(a => String(a.equipo_id) === String(eq.id) && a.categoria_id === cat.id).length;
             const max = cat.jugadores_por_equipo || 0;
             const pct = max > 0 ? Math.round((count / max) * 100) : 0;
             const color = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#10b981';
+            const logoHtml = eq.logo_url ? `<img src="${escHtml(eq.logo_url)}" alt="${escHtml(eq.nombre)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;margin-right:0.5rem;background:rgba(255,255,255,0.2);padding:2px;">` : '';
             html += `<div class="kpi-card" style="flex:1;min-width:150px;padding:0.7rem 1rem;background:${color};cursor:pointer;" onclick="mostrarAtletasEquipo('${eq.id}',${cat.id},'${escHtml(eq.nombre)}','${escHtml(cat.nombre)}')">
-                <div class="kpi-details">
-                    <span class="kpi-label">${escHtml(eq.nombre)}</span>
+                <div class="kpi-details" style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;">
+                        ${logoHtml}
+                        <span class="kpi-label">${escHtml(eq.nombre)}</span>
+                    </div>
                     <strong class="kpi-value" style="font-size:1.4rem;">${count}${max > 0 ? '/' + max : ''}</strong>
                 </div>
             </div>`;
@@ -1087,8 +1470,8 @@ async function mostrarAtletasEquipo(equipoId, catId, eqNombre, catNombre) {
     const { data: atletas, error } = await supabaseClient
         .from('atletas')
         .select(`
-            id, created_at, categoria_id,
-            socio:socio_id (id, ci, nombre, apellido, edad, fecha_nacimiento, familia_id),
+            id, created_at, categoria_id, socio_id,
+            nombre_atleta, apellido_atleta, ci_atleta, fecha_nacimiento_atleta,
             equipo:equipo_id (id, nombre)
         `)
         .eq('equipo_id', equipoId)
@@ -1100,45 +1483,50 @@ async function mostrarAtletasEquipo(equipoId, catId, eqNombre, catNombre) {
         return;
     }
 
-    // Cargar nombres de titulares y partidos jugados
+    // Cargar partidos jugados
     const partidosCount = {};
     if (atletas.length > 0) {
-        const cis = atletas.map(a => a.socio?.ci).filter(Boolean);
-        if (cis.length > 0) {
+        const socioIds = atletas.map(a => a.socio_id).filter(Boolean);
+        if (socioIds.length > 0) {
             const { data: eventos } = await supabaseClient
                 .from('partido_eventos')
-                .select('jugador_ci, partido_id')
-                .in('jugador_ci', cis);
+                .select('socio_id, partido_id')
+                .in('socio_id', socioIds);
             if (eventos) {
                 eventos.forEach(ev => {
-                    partidosCount[ev.jugador_ci] = (partidosCount[ev.jugador_ci] || 0) + 1;
+                    partidosCount[ev.socio_id] = (partidosCount[ev.socio_id] || 0) + 1;
                 });
             }
         }
     }
 
-    // Cargar titulares (familia_id → nombre)
-    const famIds = atletas.map(a => a.socio?.familia_id).filter(Boolean);
-    const famMap = {};
-    if (famIds.length > 0) {
-        const { data: titulares } = await supabaseClient.from('socios').select('id, nombre, apellido').in('id', famIds);
-        if (titulares) {
-            titulares.forEach(t => { famMap[t.id] = `${t.nombre} ${t.apellido}`.trim(); });
+    // Obtener datos del titular para mostrar
+    const titularMap = {};
+    const titularIds = atletas.map(a => a.socio_id).filter(Boolean);
+    if (titularIds.length > 0) {
+        const { data: titularesData } = await supabaseClient
+            .from('titulares')
+            .select('id, ci, nombre, apellido')
+            .in('id', titularIds);
+        if (titularesData) {
+            titularesData.forEach(t => {
+                titularMap[t.id] = `${t.nombre} ${t.apellido} (${t.ci})`;
+            });
         }
     }
 
     tbody.innerHTML = '';
     atletas.forEach(a => {
-        const s = a.socio || {};
-        const edad = s.edad || calcularEdadDesdeFecha(s.fecha_nacimiento) || '—';
-        const titular = famMap[s.familia_id] || '—';
-        const pj = partidosCount[s.ci] || 0;
-        const fechaNac = s.fecha_nacimiento || '';
-        const edadCalc = fechaNac ? calcularEdadDesdeFecha(fechaNac) : (s.edad || '—');
+        const pj = partidosCount[a.socio_id] || 0;
+        const ci = a.ci_atleta || '—';
+        const nombre = a.nombre_atleta || '—';
+        const apellido = a.apellido_atleta || '';
+        const edad = a.fecha_nacimiento_atleta ? calcularEdadDesdeFecha(a.fecha_nacimiento_atleta) : '—';
+        const titular = titularMap[a.socio_id] || '—';
         tbody.innerHTML += `<tr>
-            <td>${escHtml(s.ci || '')}</td>
-            <td><strong>${escHtml(s.nombre || '')} ${escHtml(s.apellido || '')}</strong></td>
-            <td>${edadCalc}</td>
+            <td>${escHtml(ci)}</td>
+            <td><strong>${escHtml(nombre)} ${escHtml(apellido)}</strong></td>
+            <td>${edad}</td>
             <td>${escHtml(catNombre)}</td>
             <td>${escHtml(titular)}</td>
             <td>${pj}</td>
@@ -1168,9 +1556,6 @@ async function eliminarAtletaAdmin(id) {
 
     const { error: errAtleta } = await supabaseClient.from('atletas').delete().eq('id', id);
     if (errAtleta) return alert('Error al eliminar atleta: ' + errAtleta.message);
-
-    const { error: errSocio } = await supabaseClient.from('socios').delete().eq('id', atleta.socio_id);
-    if (errSocio) return alert('Error al eliminar socio: ' + errSocio.message);
 
     alert('Atleta eliminado correctamente');
     cargarAdminAtletas();
@@ -3737,31 +4122,50 @@ async function buscarSocioAdmin() {
     const ci = limpiarCI(document.getElementById('admin-buscar-ci').value);
     if (!ci) return alert('Ingresá un CI');
 
-    const { data: socios, error } = await supabaseClient
-        .from('socios')
+    // Buscar en titulares primero
+    let socio = null;
+    let tipoSocio = null;
+    
+    const { data: titular } = await supabaseClient
+        .from('titulares')
         .select('*')
         .eq('ci', ci)
-        .limit(1);
-
-    const socio = socios && socios[0];
+        .maybeSingle();
+    
+    if (titular) {
+        socio = titular;
+        tipoSocio = 'titular';
+    } else {
+        // Buscar en cónyuges
+        const { data: conyuge } = await supabaseClient
+            .from('conyuges')
+            .select('*, titular:titulares(*)')
+            .eq('ci', ci)
+            .maybeSingle();
+        
+        if (conyuge) {
+            socio = conyuge;
+            tipoSocio = 'conyuge';
+        } else {
+            // Buscar en hijos
+            const { data: hijo } = await supabaseClient
+                .from('hijos')
+                .select('*')
+                .eq('ci', ci)
+                .maybeSingle();
+            
+            if (hijo) {
+                socio = hijo;
+                tipoSocio = 'hijo';
+            }
+        }
+    }
+    
     const resultado = document.getElementById('admin-busqueda-resultado');
-    if (error || !socio) {
+    if (!socio) {
         resultado.style.display = 'none';
         alert('Socio no encontrado');
         return;
-    }
-
-    // Obtener equipo del atleta
-    let equipoTexto = 'No inscripto';
-    const { data: atleta } = await supabaseClient
-        .from('atletas')
-        .select('equipo_id')
-        .eq('socio_id', socio.id)
-        .maybeSingle();
-
-    if (atleta) {
-        const { data: eq } = await supabaseClient.from('equipos').select('nombre').eq('id', atleta.equipo_id).single();
-        if (eq) equipoTexto = eq.nombre;
     }
 
     // Calcular edad desde fecha de nacimiento
@@ -3771,79 +4175,250 @@ async function buscarSocioAdmin() {
         const edad = calcularEdadDesdeFecha(socio.fecha_nacimiento);
         edadTexto = edad >= 0 ? edad + ' años' : 'N/A';
         fechaNacTexto = socio.fecha_nacimiento;
-    } else if (socio.edad) {
-        edadTexto = socio.edad + ' años';
     }
 
-    // Verificar si el cónyuge es socio y obtener sus datos
-    let conyugeSocioTexto = 'No';
-    let conyugeDatos = null;
-    if (socio.tipo === 'titular') {
-        const { data: conyuge } = await supabaseClient
-            .from('socios')
-            .select('*')
-            .eq('familia_id', socio.id)
-            .eq('tipo', 'conyuge')
-            .maybeSingle();
-        if (conyuge && conyuge.habilitado) {
-            conyugeSocioTexto = 'Sí';
-            conyugeDatos = conyuge;
-        }
-    }
-
-    // Obtener familiares y mostrar en lista detallada
+    // Obtener familiares según el tipo
     let familiaHtml = '';
-    console.log('Buscando familiares para socio:', socio.ci, 'tipo:', socio.tipo, 'id:', socio.id, 'familia_id:', socio.familia_id);
-    
-    // Determinar el ID del titular para buscar familiares
     let titularId = null;
-    if (socio.tipo === 'titular') {
-        titularId = socio.id;
-        console.log('Socio es titular, usando su propio ID:', titularId);
-    } else if (socio.familia_id) {
-        titularId = socio.familia_id;
-        console.log('Socio no es titular, usando familia_id:', titularId);
-    }
+    let conyugeHtml = '';
     
-    if (titularId) {
-        const { data: fam } = await supabaseClient
-            .from('socios')
+    if (tipoSocio === 'titular') {
+        titularId = socio.id;
+        
+        // Obtener cónyuges
+        const { data: conyuges } = await supabaseClient
+            .from('conyuges')
             .select('*')
-            .eq('familia_id', titularId);
-        console.log('Familiares encontrados para titularId', titularId, ':', fam);
-        console.log('Cantidad de familiares:', fam ? fam.length : 0);
-        if (fam && fam.length) {
-            fam.forEach(f => {
-                console.log('Familiar:', f.nombre, f.apellido, f.tipo, 'familia_id:', f.familia_id);
+            .eq('titular_id', titularId);
+        
+        if (conyuges && conyuges.length) {
+            conyuges.forEach(c => {
                 let edadInfo = '';
                 let fechaNacInfo = 'N/A';
-                if (f.fecha_nacimiento) {
-                    const edad = calcularEdadDesdeFecha(f.fecha_nacimiento);
+                if (c.fecha_nacimiento) {
+                    const edad = calcularEdadDesdeFecha(c.fecha_nacimiento);
                     edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
-                    fechaNacInfo = f.fecha_nacimiento;
-                } else if (f.edad) {
-                    edadInfo = `${f.edad} años`;
+                    fechaNacInfo = c.fecha_nacimiento;
                 }
-
-                let detalleExtra = '';
-                // Mostrar CI si el familiar tiene CI cargado
-                if (f.ci && f.ci !== '' && f.ci !== '0') {
-                    if (f.tipo === 'conyuge' && f.habilitado) {
-                        detalleExtra = `<span style="color: #10b981; font-weight: 600;"> | CI: ${f.ci}</span>`;
-                    } else {
-                        detalleExtra = `<span style="color: var(--text-muted); font-weight: 600;"> | CI: ${f.ci}</span>`;
-                    }
+                
+                let ciInfo = '';
+                if (c.ci && c.ci !== '' && c.ci !== '0') {
+                    ciInfo = `<span style="color: #10b981; font-weight: 600;">CI: ${c.ci}</span>`;
                 }
-
+                
+                conyugeHtml += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: white;">${c.nombre} ${c.apellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(Cónyuge adherente)</span>
+                            </div>
+                            <div style="color: var(--accent-color); font-weight: 500;">
+                                ${edadInfo} ${ciInfo ? `| ${ciInfo}` : ''}
+                            </div>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                            Fecha Nacimiento: ${fechaNacInfo}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Obtener cónyuge titular (relación conyuge_relacion)
+        const { data: conyugeRel } = await supabaseClient
+            .from('conyuge_relacion')
+            .select('*')
+            .eq('titular1_id', titularId)
+            .maybeSingle();
+        
+        if (conyugeRel) {
+            // Obtener datos del cónyuge titular
+            const { data: conyugeTitular } = await supabaseClient
+                .from('titulares')
+                .select('*')
+                .eq('id', conyugeRel.titular2_id)
+                .maybeSingle();
+            
+            if (conyugeTitular) {
+                const c = conyugeTitular;
+                let edadInfo = '';
+                let fechaNacInfo = 'N/A';
+                if (c.fecha_nacimiento) {
+                    const edad = calcularEdadDesdeFecha(c.fecha_nacimiento);
+                    edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                    fechaNacInfo = c.fecha_nacimiento;
+                }
+                
+                conyugeHtml += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: white;">${c.nombre} ${c.apellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(Cónyuge socio titular)</span>
+                            </div>
+                            <div style="color: var(--accent-color); font-weight: 500;">
+                                ${edadInfo} <span style="color: #10b981; font-weight: 600;">| CI: ${c.ci}</span>
+                            </div>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                            Fecha Nacimiento: ${fechaNacInfo}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Si no hay cónyuge, mostrar "Sin cónyuge"
+        if (!conyugeHtml) {
+            conyugeHtml = '<div style="padding: 0.5rem; color: var(--text-muted); font-size: 13px;">Sin cónyuge</div>';
+        }
+        
+        // Obtener hijos
+        const { data: hijoRelaciones } = await supabaseClient
+            .from('hijo_titular')
+            .select('hijo:hijos(*)')
+            .eq('titular_id', titularId);
+        
+        if (hijoRelaciones && hijoRelaciones.length) {
+            hijoRelaciones.forEach(hr => {
+                const h = hr.hijo;
+                if (!h) return;
+                
+                let edadInfo = '';
+                let fechaNacInfo = 'N/A';
+                if (h.fecha_nacimiento) {
+                    const edad = calcularEdadDesdeFecha(h.fecha_nacimiento);
+                    edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                    fechaNacInfo = h.fecha_nacimiento;
+                }
+                
+                let ciInfo = '';
+                if (h.ci && h.ci !== '' && h.ci !== '0') {
+                    ciInfo = `<span style="color: var(--text-muted); font-weight: 600;">| CI: ${h.ci}</span>`;
+                }
+                
                 familiaHtml += `
                     <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong style="color: white;">${f.nombre} ${f.apellido}</strong>
-                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(${f.tipo})</span>
+                                <strong style="color: white;">${h.nombre} ${h.apellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(hijo)</span>
                             </div>
                             <div style="color: var(--accent-color); font-weight: 500;">
-                                ${edadInfo}${detalleExtra}
+                                ${edadInfo} ${ciInfo}
+                            </div>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                            Fecha Nacimiento: ${fechaNacInfo}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+    } else if (tipoSocio === 'conyuge') {
+        // Mostrar titular del cónyuge
+        if (socio.titular) {
+            const t = socio.titular;
+            let edadInfo = '';
+            let fechaNacInfo = 'N/A';
+            if (t.fecha_nacimiento) {
+                const edad = calcularEdadDesdeFecha(t.fecha_nacimiento);
+                edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                fechaNacInfo = t.fecha_nacimiento;
+            }
+            
+            familiaHtml += `
+                <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="color: white;">${t.nombre} ${t.apellido}</strong>
+                            <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(titular)</span>
+                        </div>
+                        <div style="color: var(--accent-color); font-weight: 500;">
+                            ${edadInfo} <span style="color: #10b981; font-weight: 600;">| CI: ${t.ci}</span>
+                        </div>
+                    </div>
+                    <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                        Fecha Nacimiento: ${fechaNacInfo}
+                    </div>
+                </div>
+            `;
+            
+            // Obtener hijos del titular
+            titularId = t.id;
+            const { data: hijoRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('hijo:hijos(*)')
+                .eq('titular_id', titularId);
+            
+            if (hijoRelaciones && hijoRelaciones.length) {
+                hijoRelaciones.forEach(hr => {
+                    const h = hr.hijo;
+                    if (!h) return;
+                    
+                    let edadInfo = '';
+                    let fechaNacInfo = 'N/A';
+                    if (h.fecha_nacimiento) {
+                        const edad = calcularEdadDesdeFecha(h.fecha_nacimiento);
+                        edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                        fechaNacInfo = h.fecha_nacimiento;
+                    }
+                    
+                    let detalleExtra = '';
+                    if (h.ci && h.ci !== '' && h.ci !== '0') {
+                        detalleExtra = `<span style="color: var(--text-muted); font-weight: 600;"> | CI: ${h.ci}</span>`;
+                    }
+                    
+                    familiaHtml += `
+                        <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="color: white;">${h.nombre} ${h.apellido}</strong>
+                                    <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(hijo)</span>
+                                </div>
+                                <div style="color: var(--accent-color); font-weight: 500;">
+                                    ${edadInfo}${detalleExtra}
+                                </div>
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                                Fecha Nacimiento: ${fechaNacInfo}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        }
+    } else if (tipoSocio === 'hijo') {
+        // Mostrar padres del hijo
+        const { data: padreRelaciones } = await supabaseClient
+            .from('hijo_titular')
+            .select('titular:titulares(*)')
+            .eq('hijo_id', socio.id);
+        
+        if (padreRelaciones && padreRelaciones.length) {
+            padreRelaciones.forEach(pr => {
+                const t = pr.titular;
+                if (!t) return;
+                
+                let edadInfo = '';
+                let fechaNacInfo = 'N/A';
+                if (t.fecha_nacimiento) {
+                    const edad = calcularEdadDesdeFecha(t.fecha_nacimiento);
+                    edadInfo = edad >= 0 ? `${edad} años` : 'N/A';
+                    fechaNacInfo = t.fecha_nacimiento;
+                }
+                
+                familiaHtml += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: white;">${t.nombre} ${t.apellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(padre titular)</span>
+                            </div>
+                            <div style="color: var(--accent-color); font-weight: 500;">
+                                ${edadInfo} <span style="color: #10b981; font-weight: 600;">| CI: ${t.ci}</span>
                             </div>
                         </div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
@@ -3859,15 +4434,64 @@ async function buscarSocioAdmin() {
         familiaHtml = '<span style="color: var(--text-muted);">Sin familiares registrados</span>';
     }
 
+    // Obtener atletas inscritos si es titular
+    let atletasHtml = '';
+    if (tipoSocio === 'titular' && titularId) {
+        const { data: atletas } = await supabaseClient
+            .from('atletas')
+            .select(`
+                id, created_at, categoria_id,
+                nombre_atleta, apellido_atleta, ci_atleta, fecha_nacimiento_atleta,
+                equipo:equipo_id (id, nombre),
+                categoria:categoria_id (nombre)
+            `)
+            .eq('socio_id', titularId);
+        
+        if (atletas && atletas.length) {
+            atletas.forEach(a => {
+                const fechaInscripcion = a.created_at ? new Date(a.created_at).toLocaleDateString() : 'N/A';
+                const equipoNombre = a.equipo?.nombre || 'N/A';
+                const categoriaNombre = a.categoria?.nombre || 'N/A';
+                const atletaNombre = a.nombre_atleta || 'Desconocido';
+                const atletaApellido = a.apellido_atleta || '';
+                const atletaCi = a.ci_atleta || 'N/A';
+                const atletaFechaNac = a.fecha_nacimiento_atleta || 'N/A';
+                const atletaEdad = a.fecha_nacimiento_atleta ? calcularEdadDesdeFecha(a.fecha_nacimiento_atleta) + ' años' : 'N/A';
+                
+                atletasHtml += `
+                    <div style="padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: white;">${atletaNombre} ${atletaApellido}</strong>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(CI: ${atletaCi})</span>
+                            </div>
+                            <div style="color: var(--accent-color); font-weight: 500;">
+                                ${atletaEdad}
+                            </div>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
+                            Fecha Nacimiento: ${atletaFechaNac} | Equipo: ${equipoNombre} | Categoría: ${categoriaNombre} | Inscripto: ${fechaInscripcion}
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            atletasHtml = '<span style="color: var(--text-muted);">Sin atletas inscritos</span>';
+        }
+    } else {
+        atletasHtml = '<span style="color: var(--text-muted);">Solo disponible para titulares</span>';
+    }
+
     document.getElementById('admin-busq-ci').textContent = socio.ci || 'N/A';
     document.getElementById('admin-busq-nombre').textContent = `${socio.nombre} ${socio.apellido}`.trim();
-    document.getElementById('admin-busq-tipo').textContent = socio.tipo;
+    document.getElementById('admin-busq-tipo').textContent = tipoSocio;
     document.getElementById('admin-busq-fecha-nac').textContent = fechaNacTexto;
     document.getElementById('admin-busq-edad').textContent = edadTexto;
-    document.getElementById('admin-busq-equipo').textContent = equipoTexto;
+    document.getElementById('admin-busq-equipo').textContent = 'N/A';
     document.getElementById('admin-busq-estado').textContent = socio.habilitado ? 'Habilitado' : 'Deshabilitado';
-    document.getElementById('admin-busq-conyuge-socio').textContent = conyugeSocioTexto;
+    document.getElementById('admin-busq-conyuge').innerHTML = conyugeHtml || '<span style="color: var(--text-muted);">Sin cónyuge</span>';
     document.getElementById('admin-busq-familia').innerHTML = familiaHtml;
+    document.getElementById('admin-busq-atletas').innerHTML = atletasHtml;
     resultado.style.display = 'block';
 }
 
