@@ -3645,7 +3645,7 @@ async function verDetalleEquipo(equipoId) {
         // 3. Obtener atletas/socios del equipo
         const { data: atletas, error: errA } = await supabaseClient
             .from('atletas')
-            .select('id, socio_id, categoria_id, socios(id, nombre, apellido, edad, habilitado, fecha_nacimiento, ci)')
+            .select('id, socio_id, categoria_id, socios(id, nombre, apellido, habilitado, fecha_nacimiento, ci)')
             .eq('equipo_id', equipoId);
 
         if (errA) throw errA;
@@ -3760,7 +3760,7 @@ async function verDetalleEquipo(equipoId) {
                     const s = a.socios;
                     if (!s) return;
                     const nombre = `${s.nombre} ${s.apellido}`;
-                    const edad = s.fecha_nacimiento ? calcularEdadDesdeFecha(s.fecha_nacimiento) : (s.edad || '—');
+                    const edad = s.fecha_nacimiento ? calcularEdadDesdeFecha(s.fecha_nacimiento) : '—';
                     const habilitado = s.habilitado ? '<span class="badge-status-socio activo">Habilitado</span>' : '<span class="badge-status-socio inactivo">Inactivo</span>';
                     const catObj = categoriasConfig.find(c => c.id === a.categoria_id);
                     const catName = catObj ? catObj.nombre : 'Sin categoría';
