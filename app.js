@@ -12,19 +12,19 @@ let tableroSyncInterval = null;
 
 async function inicializarTablasAuxiliares() {
     try {
-        const { data: cats } = await supabaseClient.from('categorias_config').select('*').order('edad_min');
+        const { data: cats } = await supabaseClient.from('categorias_config').select('id, nombre, edad_min, edad_max, jugadores_por_equipo').order('edad_min');
         if (cats) categoriasConfig = cats;
 
-        const { data: cnchs } = await supabaseClient.from('canchas').select('*').order('nombre');
+        const { data: cnchs } = await supabaseClient.from('canchas').select('id, nombre').order('nombre');
         if (cnchs) canchasList = cnchs;
 
-        const { data: eqs } = await supabaseClient.from('equipos').select('*').order('nombre');
+        const { data: eqs } = await supabaseClient.from('equipos').select('id, nombre, logo_url, cupo_maximo').order('nombre');
         if (eqs) equiposList = eqs;
 
-        const { data: cf } = await supabaseClient.from('config_faltas').select('*').order('id');
+        const { data: cf } = await supabaseClient.from('config_faltas').select('id, tipo, nombre, monto').order('id');
         if (cf && cf.length) configFaltas = cf;
 
-        const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('*');
+        const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('categoria_id, equipo_id');
         categoriaEquiposMap = {};
         if (catEqs) {
             catEqs.forEach(ce => {
@@ -94,7 +94,7 @@ function iniciarRealtimeEstadisticas() {
                             if (mostrar) {
                                 (async function() {
                                     try {
-                                        var partidoRes = await supabaseClient.from('partidos').select('*').eq('id', ev.partido_id).single();
+                                        var partidoRes = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo').eq('id', ev.partido_id).single();
                                         if (partidoRes.data) {
                                             var p = partidoRes.data;
                                             if (!equiposList || equiposList.length === 0) await asegurarDatosReferencia();
@@ -193,7 +193,7 @@ async function buscarSocioInscripcion() {
     // Buscar en titulares
     let { data: titular } = await supabaseClient
         .from('titulares')
-        .select('*')
+        .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado, telefono')
         .eq('ci', ci)
         .maybeSingle();
     
@@ -206,7 +206,7 @@ async function buscarSocioInscripcion() {
         // Buscar en cónyuges
         let { data: conyuge } = await supabaseClient
             .from('conyuges')
-            .select('*')
+            .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado, telefono')
             .eq('ci', ci)
             .maybeSingle();
         
@@ -217,7 +217,7 @@ async function buscarSocioInscripcion() {
             // Buscar en hijos
             let { data: hijo } = await supabaseClient
                 .from('hijos')
-                .select('*')
+                .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado')
                 .eq('ci', ci)
                 .maybeSingle();
             
@@ -265,13 +265,13 @@ async function buscarSocioInscripcion() {
         // Cargar cónyuges (desde tabla conyuges)
         const { data: conyuges } = await supabaseClient
             .from('conyuges')
-            .select('*')
+            .select('id, ci, nombre, apellido, fecha_nacimiento')
             .eq('titular_id', socio.id);
         
         // También buscar en conyuge_relacion (para titulares que son cónyuges entre sí)
         const { data: relacionesConyuge } = await supabaseClient
             .from('conyuge_relacion')
-            .select('*')
+            .select('id, titular1_id, titular2_id')
             .or(`titular1_id.eq.${socio.id},titular2_id.eq.${socio.id}`);
         
         // Obtener IDs de los cónyuges titulares
@@ -288,7 +288,7 @@ async function buscarSocioInscripcion() {
         if (conyugeTitularIds.size > 0) {
             const { data: titularesConyuges } = await supabaseClient
                 .from('titulares')
-                .select('*')
+                .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado')
                 .in('id', Array.from(conyugeTitularIds));
             conyugesTitulares = titularesConyuges || [];
         }
@@ -297,7 +297,7 @@ async function buscarSocioInscripcion() {
             for (const c of conyuges) {
                 const { count: atletaCount } = await supabaseClient
                     .from('atletas')
-                    .select('*', { count: 'exact', head: true })
+                    .select('id', { count: 'exact', head: true })
                     .eq('socio_id', c.id);
                 const inscrito = (atletaCount || 0) > 0;
                 const label = inscrito ? `✓ ${c.nombre} ${c.apellido} (Cónyuge - Ya inscripto)` : `${c.nombre} ${c.apellido} (Cónyuge)`;
@@ -310,7 +310,7 @@ async function buscarSocioInscripcion() {
             for (const c of conyugesTitulares) {
                 const { count: atletaCount } = await supabaseClient
                     .from('atletas')
-                    .select('*', { count: 'exact', head: true })
+                    .select('id', { count: 'exact', head: true })
                     .eq('ci_atleta', c.ci);
                 const inscrito = (atletaCount || 0) > 0;
                 const label = inscrito ? `✓ ${c.nombre} ${c.apellido} (Cónyuge - Ya inscripto)` : `${c.nombre} ${c.apellido} (Cónyuge)`;
@@ -328,14 +328,14 @@ async function buscarSocioInscripcion() {
             const hijoIds = hijosRel.map(h => h.hijo_id);
             const { data: hijos } = await supabaseClient
                 .from('hijos')
-                .select('*')
+                .select('id, ci, nombre, apellido, fecha_nacimiento')
                 .in('id', hijoIds);
             
             if (hijos && hijos.length) {
                 for (const h of hijos) {
                     const { count: atletaCount } = await supabaseClient
                         .from('atletas')
-                        .select('*', { count: 'exact', head: true })
+                        .select('id', { count: 'exact', head: true })
                         .eq('socio_id', h.id);
                     const inscrito = (atletaCount || 0) > 0;
                     const label = inscrito ? `✓ ${h.nombre} ${h.apellido} (Hijo - Ya inscripto)` : `${h.nombre} ${h.apellido} (Hijo)`;
@@ -348,7 +348,7 @@ async function buscarSocioInscripcion() {
     // Contar atletas ya registrados con este CI
     const { count: atletasCount, error: errCount } = await supabaseClient
         .from('atletas')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('socio_id', socio.id);
 
     const cupoMaximo = 6;
@@ -370,7 +370,7 @@ async function buscarSocioInscripcion() {
         const select = document.getElementById('insc-equipo');
         select.innerHTML = '<option value="">Seleccionar equipo...</option>';
         const cuposData = await Promise.all(equiposList.map(e =>
-            supabaseClient.from('atletas').select('*', { count: 'exact', head: true }).eq('equipo_id', e.id)
+            supabaseClient.from('atletas').select('id', { count: 'exact', head: true }).eq('equipo_id', e.id)
         ));
         let allOptsHtml = '<option value="">Seleccionar equipo...</option>';
         equiposList.forEach((e, i) => {
@@ -675,12 +675,12 @@ async function inscribirAtleta() {
 
     // Verificar que las categorías seleccionadas estén asignadas al equipo
     for (const cat of catsSeleccionadas) {
-        const { data: categoriaEquipo } = await supabaseClient
-            .from('categoria_equipos')
-            .select('*')
-            .eq('categoria_id', cat.id)
-            .eq('equipo_id', equipoId)
-            .maybeSingle();
+            const { data: categoriaEquipo } = await supabaseClient
+                .from('categoria_equipos')
+                .select('id, categoria_id, equipo_id')
+                .eq('categoria_id', cat.id)
+                .eq('equipo_id', equipoId)
+                .maybeSingle();
         
         if (!categoriaEquipo) {
             return alert(`La categoría "${cat.nombre}" no está asignada al equipo seleccionado. Por favor, selecciona una categoría válida para este equipo.`);
@@ -693,7 +693,7 @@ async function inscribirAtleta() {
         if (maxPorCat > 0) {
             const { count: usados } = await supabaseClient
                 .from('atletas')
-                .select('*', { count: 'exact', head: true })
+                .select('id', { count: 'exact', head: true })
                 .eq('equipo_id', equipoId)
                 .eq('categoria_id', cat.id);
             if ((usados || 0) >= maxPorCat) {
@@ -935,7 +935,7 @@ async function actualizarListaCobros() {
     lista.innerHTML = "<tr><td colspan='7'>Cargando deudas...</td></tr>";
 
     const { data: faltas, error } = await supabaseClient
-        .from('faltas').select('*').eq('pagado', false).order('created_at', { ascending: false });
+        .from('faltas').select('id, ci_jugador, nombre_jugador, tipo_falta, categoria_nombre, equipo_nombre, monto, pagado').eq('pagado', false).order('created_at', { ascending: false });
 
     if (error) return alert('Error: ' + error.message);
     lista.innerHTML = '';
@@ -980,8 +980,9 @@ async function cargarListadoSocios() {
 
     const { data: titulares, error } = await supabaseClient
         .from('titulares')
-        .select('*')
-        .order('apellido');
+        .select('id, ci, nombre, apellido, habilitado, created_at')
+        .order('apellido')
+        .limit(50);
 
     if (error) return alert('Error: ' + error.message);
 
@@ -1015,7 +1016,7 @@ async function toggleHabilitado(id, habilitado) {
 // ADMIN: EQUIPOS (MODIFICADO CON LOGOS Y ELIMINACIÓN)
 // ============================
 async function cargarEquiposAdmin() {
-    const { data: equipos, error } = await supabaseClient.from('equipos').select('*').order('nombre');
+    const { data: equipos, error } = await supabaseClient.from('equipos').select('id, nombre, logo_url, cupo_maximo').order('nombre');
     if (error || !equipos) return;
     
     equiposList = equipos;
@@ -1157,12 +1158,12 @@ async function guardarEquipo(id) {
 // ADMIN: CATEGORÍAS (NUEVO)
 // ============================
 async function cargarCategoriasAdmin() {
-    const { data: categorias, error } = await supabaseClient.from('categorias_config').select('*').order('edad_min');
+    const { data: categorias, error } = await supabaseClient.from('categorias_config').select('id, nombre, edad_min, edad_max, jugadores_por_equipo').order('edad_min');
     if (error || !categorias) return;
     
     categoriasConfig = categorias;
 
-    const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('*');
+    const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('categoria_id, equipo_id');
     categoriaEquiposMap = {};
     if (catEqs) {
         catEqs.forEach(ce => {
@@ -1317,7 +1318,7 @@ async function eliminarCategoria(id) {
 // ADMIN: CANCHAS (NUEVO)
 // ============================
 async function cargarCanchasAdmin() {
-    const { data: canchas, error } = await supabaseClient.from('canchas').select('*').order('nombre');
+    const { data: canchas, error } = await supabaseClient.from('canchas').select('id, nombre').order('nombre');
     if (error || !canchas) return;
     
     canchasList = canchas;
@@ -1363,8 +1364,8 @@ async function cargarAdminAtletas() {
     document.getElementById('atletas-categorias-container').style.display = 'block';
 
     // Totals de adherentes (cónyuges e hijos)
-    const { count: conyugesCount } = await supabaseClient.from('conyuges').select('*', { count: 'exact', head: true });
-    const { count: hijosCount } = await supabaseClient.from('hijos').select('*', { count: 'exact', head: true });
+    const { count: conyugesCount } = await supabaseClient.from('conyuges').select('id', { count: 'exact', head: true });
+    const { count: hijosCount } = await supabaseClient.from('hijos').select('id', { count: 'exact', head: true });
     const adhCount = (conyugesCount || 0) + (hijosCount || 0);
     const elAdh = document.getElementById('admin-total-adherentes');
     if (elAdh) elAdh.textContent = adhCount || 0;
@@ -1565,7 +1566,7 @@ async function eliminarAtletaAdmin(id) {
 // ADMIN: CONFIGURACIÓN DE TARJETAS
 // ============================
 async function cargarConfigFaltasAdmin() {
-    const { data: faltas, error } = await supabaseClient.from('config_faltas').select('*').order('id');
+    const { data: faltas, error } = await supabaseClient.from('config_faltas').select('id, tipo, nombre, monto').order('id');
     if (error || !faltas) return;
 
     configFaltas = faltas;
@@ -1634,7 +1635,7 @@ async function cargarArqueo(fechaDesde, fechaHasta, ciBuscar) {
     tbody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
 
     // Construir query
-    let query = supabaseClient.from('faltas').select('*').eq('pagado', true);
+    let query = supabaseClient.from('faltas').select('id, ci_jugador, nombre_jugador, tipo_falta, categoria_nombre, equipo_nombre, monto, pagado, created_at, pagado_at').eq('pagado', true);
     if (fechaDesde) {
         query = query.gte('created_at', new Date(fechaDesde).toISOString());
     }
@@ -1762,7 +1763,7 @@ function actualizarSelectsPartidos() {
 async function cargarPartidosAdmin() {
     const { data: partidos, error } = await supabaseClient
         .from('partidos')
-        .select('*')
+        .select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, goles_a, goles_b, tiempo_jugado, periodo, inicio_periodo')
         .order('fecha_hora', { ascending: true });
 
     if (error || !partidos) {
@@ -1909,7 +1910,7 @@ async function actualizarMarcador(id, finalizar) {
 
 async function finalizarPartido(id) {
     if (!confirm('¿Finalizar el partido?')) return;
-    const { data: p } = await supabaseClient.from('partidos').select('*').eq('id', id).single();
+    const { data: p } = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, inicio_periodo, periodo').eq('id', id).single();
     if (!p) return;
     let tiempoFinal = Math.max(0, Number(p.tiempo_jugado) || 0);
     if (p.en_curso && p.inicio_periodo) {
@@ -1921,7 +1922,7 @@ async function finalizarPartido(id) {
 
     // Contar goles desde partido_eventos
     const { data: golesEventos } = await supabaseClient.from('partido_eventos')
-        .select('*')
+        .select('id, partido_id, equipo_id, tipo')
         .eq('partido_id', id)
         .eq('tipo', 'gol');
     const golesA = (golesEventos || []).filter(e => String(e.equipo_id) === String(p.equipo_a_id)).length;
@@ -1946,13 +1947,13 @@ async function finalizarPartido(id) {
 
     // Obtener tarjetas del partido
     const { data: eventos } = await supabaseClient.from('partido_eventos')
-        .select('*')
+        .select('id, partido_id, equipo_id, tipo, jugador_ci, jugador_nombre')
         .eq('partido_id', id)
         .in('tipo', ['tarjeta_amarilla', 'tarjeta_roja']);
 
     if (eventos && eventos.length > 0) {
         // Obtener montos de config_faltas
-        const { data: configs } = await supabaseClient.from('config_faltas').select('*');
+        const { data: configs } = await supabaseClient.from('config_faltas').select('tipo, monto');
         const montoMap = {};
         (configs || []).forEach(c => { montoMap[c.tipo] = Number(c.monto) || 0; });
 
@@ -2000,7 +2001,7 @@ async function reabrirPartido(id) {
 async function cargarEventosPartido(partidoId) {
     const { data: eventos, error } = await supabaseClient
         .from('partido_eventos')
-        .select('*')
+        .select('id, partido_id, equipo_id, tipo, jugador_nombre, jugador_ci, minuto')
         .eq('partido_id', partidoId)
         .order('minuto');
     if (error) return [];
@@ -2232,7 +2233,7 @@ async function habilitarPartido(id) {
 async function veedorIniciarPartido() {
     if (!_veedorPartidoActual) return;
     const pid = _veedorPartidoActual.id;
-    const { data: p } = await supabaseClient.from('partidos').select('*').eq('id', pid).single();
+        const { data: p } = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, en_curso, tiempo_jugado, periodo, inicio_periodo').eq('id', pid).single();
     if (!p) return;
     // Si está en entretiempo, avanzar a segundo_tiempo
     let periodo = p.periodo;
@@ -2275,7 +2276,7 @@ async function veedorFinalizarPartido() {
 
 async function veedorPausarPartido() {
     if (!_veedorPartidoActual) return;
-    const { data: p } = await supabaseClient.from('partidos').select('*').eq('id', _veedorPartidoActual.id).single();
+    const { data: p } = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo').eq('id', _veedorPartidoActual.id).single();
     if (!p) return;
     await pausarPartido(p.id, p);
     const iniciar = document.getElementById('veedor-btn-iniciar');
@@ -2410,7 +2411,7 @@ async function veedorRegistrarEvento(partidoId, equipoId, nombre, ci, tipo) {
     // Show goal celebration - NO await after this (instant)
     if (tipo === 'gol') {
         try {
-            var pRes = await supabaseClient.from('partidos').select('*').eq('id', partidoId).single();
+            var pRes = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo').eq('id', partidoId).single();
             if (pRes.data) {
                 if (!equiposList || equiposList.length === 0) await asegurarDatosReferencia();
                 var eqA = equiposList.find(function(e) { return String(e.id) === String(pRes.data.equipo_a_id); });
@@ -2493,11 +2494,11 @@ let _extraTargets = {}; // partido_id → target seconds for extra time end
 
 async function asegurarDatosReferencia() {
     if (equiposList.length === 0) {
-        const { data } = await supabaseClient.from('equipos').select('*');
+        const { data } = await supabaseClient.from('equipos').select('id, nombre, logo_url, cupo_maximo');
         if (data) equiposList = data;
     }
     if (canchasList.length === 0) {
-        const { data } = await supabaseClient.from('canchas').select('*');
+        const { data } = await supabaseClient.from('canchas').select('id, nombre');
         if (data) canchasList = data;
     }
 }
@@ -2550,7 +2551,7 @@ function arrancarTimerPartido(pid) {
     setTimeout(function() {
         (async function() {
             try {
-                var res = await supabaseClient.from('partidos').select('*').eq('id', pid).single();
+                var res = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo, finalizado').eq('id', pid).single();
                 var d = res.data;
                 if (!d || d.finalizado || !d.en_curso) {
                     detenerTimerPartido(pid);
@@ -2583,7 +2584,7 @@ function arrancarTimerPartido(pid) {
             var transcurrido = Math.floor(elapsedMs / 1000);
             if (transcurrido > 0 && transcurrido % 30 === 0 && tick._syncing !== true) {
                 tick._syncing = true;
-                supabaseClient.from('partidos').select('*').eq('id', pid).single().then(function(res2) {
+                supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo, finalizado').eq('id', pid).single().then(function(res2) {
                     if (res2.data && !res2.data.finalizado && res2.data.en_curso) {
                         tick.data = res2.data;
                         tick.inicioLocal = Date.now();
@@ -2672,7 +2673,7 @@ setInterval(async function() {
     var pid = _veedorPartidoActual ? _veedorPartidoActual.id : null;
     if (!pid) return;
     try {
-        var res = await supabaseClient.from('partidos').select('*').eq('id', pid).single();
+        var res = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo, finalizado').eq('id', pid).single();
         if (res.data) _fallbackTimerData = res.data;
     } catch(e) {}
 }, 5000);
@@ -2709,7 +2710,7 @@ async function iniciarPartido(id) {
 
 async function pausarPartido(id, partido) {
     if (!partido) {
-        const { data } = await supabaseClient.from('partidos').select('*').eq('id', id).single();
+        const { data } = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, categoria_id, en_curso, tiempo_jugado, periodo, inicio_periodo, finalizado').eq('id', id).single();
         partido = data;
     }
     var ahora = Date.now();
@@ -2735,7 +2736,7 @@ async function pausarPartido(id, partido) {
 }
 
 async function reanudarPartido(id, destino) {
-    const { data: p } = await supabaseClient.from('partidos').select('*').eq('id', id).single();
+    const { data: p } = await supabaseClient.from('partidos').select('id, equipo_a_id, equipo_b_id, en_curso, tiempo_jugado, periodo, inicio_periodo').eq('id', id).single();
     if (!p) return;
     let periodo = p.periodo;
     if (destino === '2T') {
@@ -2864,7 +2865,7 @@ function mostrarAnimacionGol(partidoId, jugador, equipo, rival, minuto) {
 async function cargarPublicidadAdmin() {
     var msg = document.getElementById('pub-msg');
     try {
-        var { data, error } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        var { data, error } = await supabaseClient.from('config_publicidad').select('id, facebook_url, instagram_url, youtube_url, web_url, ad_izquierda_link, ad_derecha_link').eq('id', 1).single();
         if (error || !data) { if (msg) msg.textContent = 'Error al cargar: ' + (error ? error.message : 'sin datos'); return; }
     } catch(e) { if (msg) msg.textContent = 'Error de conexión: ' + e.message; return; }
     document.getElementById('pub-facebook').value = data.facebook_url || '';
@@ -2918,7 +2919,7 @@ async function cargarRedesSociales() {
     var container = document.getElementById('footer-social');
     if (!container) return;
     try {
-        var { data } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        var { data } = await supabaseClient.from('config_publicidad').select('id, facebook_url, instagram_url, youtube_url, web_url, ad_izquierda_link, ad_derecha_link').eq('id', 1).single();
         if (!data) return;
     } catch(e) { return; }
     var redes = [
@@ -2952,7 +2953,7 @@ async function cargarAdsLaterales() {
     var rightCol = document.getElementById('est-ad-right');
     if (!leftCol || !rightCol) return;
     try {
-        var { data } = await supabaseClient.from('config_publicidad').select('*').eq('id', 1).single();
+        var { data } = await supabaseClient.from('config_publicidad').select('id, facebook_url, instagram_url, youtube_url, web_url, ad_izquierda_link, ad_derecha_link').eq('id', 1).single();
         if (!data) return;
     } catch(e) { return; }
     if (data.ad_izquierda_img && data.ad_izquierda_link) {
@@ -2992,7 +2993,7 @@ async function cargarEstadisticas() {
 async function cargarEventosEnVivo() {
     var todosPartidos;
     try {
-        var res = await supabaseClient.from('partidos').select('*').eq('finalizado', false).order('fecha_hora', { ascending: false });
+        var res = await supabaseClient.from('partidos').select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, tiempo_jugado, periodo, inicio_periodo').eq('finalizado', false).order('fecha_hora', { ascending: false });
         todosPartidos = res.data;
         if (res.error) todosPartidos = null;
     } catch(e) { todosPartidos = null; }
@@ -3134,7 +3135,7 @@ async function cargarEventosEnVivo() {
 async function cargarFixturePublico() {
     const { data: partidos, error } = await supabaseClient
         .from('partidos')
-        .select('*')
+        .select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, tiempo_jugado, periodo, inicio_periodo')
         .eq('finalizado', false)
         .order('fecha_hora', { ascending: true });
 
@@ -3205,7 +3206,7 @@ async function cargarFixturePublico() {
 async function cargarEstadisticasYTabla() {
     const { data: partidos, error } = await supabaseClient
         .from('partidos')
-        .select('*')
+        .select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, goles_a, goles_b, tiempo_jugado, periodo, inicio_periodo')
         .order('fecha_hora', { ascending: false });
 
     const listRes = document.getElementById('lista-resultados');
@@ -3219,14 +3220,14 @@ async function cargarEstadisticasYTabla() {
     await asegurarDatosReferencia();
 
     if (categoriasConfig.length === 0) {
-        const { data: cats } = await supabaseClient.from('categorias_config').select('*').order('edad_min');
+        const { data: cats } = await supabaseClient.from('categorias_config').select('id, nombre, edad_min, edad_max, jugadores_por_equipo').order('edad_min');
         if (cats) categoriasConfig = cats;
     }
     if (Object.keys(categoriaEquiposMap).length === 0) {
-        const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('*');
+        const { data: catEqs } = await supabaseClient.from('categoria_equipos').select('categoria_id, equipo_id');
+        categoriaEquiposMap = {};
         if (catEqs) {
-            categoriaEquiposMap = {};
-            catEqs.forEach(function(ce) {
+            catEqs.forEach(ce => {
                 if (!categoriaEquiposMap[ce.categoria_id]) categoriaEquiposMap[ce.categoria_id] = [];
                 categoriaEquiposMap[ce.categoria_id].push(ce.equipo_id);
             });
@@ -3538,8 +3539,7 @@ async function verEstadisticasJugador(nombre, ci) {
     if (ci) {
         var res = await supabaseClient
             .from('partido_eventos')
-            .select('*')
-            .eq('jugador_ci', ci)
+            .select('id, partido_id, equipo_id, tipo, jugador_ci, minuto, jugador_nombre')
             .order('minuto');
         eventos = res.data;
         if (res.error) eventos = null;
@@ -3550,7 +3550,7 @@ async function verEstadisticasJugador(nombre, ci) {
     if (!eventos || eventos.length === 0) {
         var res2 = await supabaseClient
             .from('partido_eventos')
-            .select('*')
+            .select('id, partido_id, equipo_id, tipo, jugador_ci, minuto, jugador_nombre')
             .ilike('jugador_nombre', '%' + nombre + '%')
             .order('minuto');
         if (res2.error || !res2.data || res2.data.length === 0) {
@@ -3572,8 +3572,7 @@ async function verEstadisticasJugador(nombre, ci) {
     const partidoIds = Object.keys(porPartido);
     const { data: partidos } = await supabaseClient
         .from('partidos')
-        .select('*')
-        .in('id', partidoIds)
+        .select('id, fecha_hora, equipo_a_id, equipo_b_id, goles_a, goles_b, finalizado, categoria_id')
         .order('fecha_hora', { ascending: false });
 
     let html = `<div class="modal-overlay" onclick="this.remove()">`;
@@ -3638,7 +3637,7 @@ async function verDetalleEquipo(equipoId) {
         // 2. Obtener datos del equipo
         let eq = equiposList.find(e => String(e.id) === String(equipoId));
         if (!eq) {
-            const { data: fetchEq } = await supabaseClient.from('equipos').select('*').eq('id', equipoId).single();
+            const { data: fetchEq } = await supabaseClient.from('equipos').select('id, nombre, logo_url, cupo_maximo').eq('id', equipoId).single();
             eq = fetchEq || { id: equipoId, nombre: 'Equipo desconocido', logo_url: '' };
         }
 
@@ -3653,7 +3652,7 @@ async function verDetalleEquipo(equipoId) {
         // 4. Obtener partidos en los que juega el equipo
         const { data: partidos, error: errP } = await supabaseClient
             .from('partidos')
-            .select('*')
+            .select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, goles_a, goles_b, tiempo_jugado, periodo, inicio_periodo')
             .or(`equipo_a_id.eq.${equipoId},equipo_b_id.eq.${equipoId}`)
             .order('fecha_hora', { ascending: false });
 
@@ -3665,7 +3664,7 @@ async function verDetalleEquipo(equipoId) {
         if (matchIds.length > 0) {
             const { data: evs, error: errEv } = await supabaseClient
                 .from('partido_eventos')
-                .select('*')
+                .select('id, partido_id, equipo_id, tipo, jugador_nombre, jugador_ci, minuto')
                 .in('partido_id', matchIds);
             if (!errEv) eventos = evs;
         }
@@ -3798,7 +3797,7 @@ async function verDetalleEquipo(equipoId) {
                     // Obtener partidos finalizados de esta categoría para tabla standings
                     const { data: matchesCat } = await supabaseClient
                         .from('partidos')
-                        .select('*')
+                        .select('id, equipo_a_id, equipo_b_id, goles_a, goles_b, finalizado, categoria_id')
                         .eq('categoria_id', catId)
                         .eq('finalizado', true);
 
@@ -4128,7 +4127,7 @@ async function buscarSocioAdmin() {
     
     const { data: titular } = await supabaseClient
         .from('titulares')
-        .select('*')
+        .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado, telefono')
         .eq('ci', ci)
         .maybeSingle();
     
@@ -4139,7 +4138,7 @@ async function buscarSocioAdmin() {
         // Buscar en cónyuges
         const { data: conyuge } = await supabaseClient
             .from('conyuges')
-            .select('*, titular:titulares(*)')
+            .select('id, ci, nombre, apellido, fecha_nacimiento, titular_id, titular:titulares(id, ci, nombre, apellido, fecha_nacimiento)')
             .eq('ci', ci)
             .maybeSingle();
         
@@ -4150,7 +4149,7 @@ async function buscarSocioAdmin() {
             // Buscar en hijos
             const { data: hijo } = await supabaseClient
                 .from('hijos')
-                .select('*')
+                .select('id, ci, nombre, apellido, fecha_nacimiento')
                 .eq('ci', ci)
                 .maybeSingle();
             
@@ -4188,7 +4187,7 @@ async function buscarSocioAdmin() {
         // Obtener cónyuges
         const { data: conyuges } = await supabaseClient
             .from('conyuges')
-            .select('*')
+            .select('id, ci, nombre, apellido, fecha_nacimiento')
             .eq('titular_id', titularId);
         
         if (conyuges && conyuges.length) {
@@ -4228,7 +4227,7 @@ async function buscarSocioAdmin() {
         // Obtener cónyuge titular (relación conyuge_relacion)
         const { data: conyugeRel } = await supabaseClient
             .from('conyuge_relacion')
-            .select('*')
+            .select('id, titular1_id, titular2_id')
             .eq('titular1_id', titularId)
             .maybeSingle();
         
@@ -4236,7 +4235,7 @@ async function buscarSocioAdmin() {
             // Obtener datos del cónyuge titular
             const { data: conyugeTitular } = await supabaseClient
                 .from('titulares')
-                .select('*')
+                .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado')
                 .eq('id', conyugeRel.titular2_id)
                 .maybeSingle();
             
@@ -4530,7 +4529,7 @@ document.getElementById('form-login').addEventListener('submit', async function(
     let fallback = false;
 
     try {
-        const { data, error } = await supabaseClient.from('users').select('*').eq('username', user).single();
+        const { data, error } = await supabaseClient.from('users').select('id, username, password_hash, role').eq('username', user).single();
         if (error || !data) fallback = true;
         else userData = data;
     } catch (err) { fallback = true; }
@@ -4743,7 +4742,7 @@ async function cargarEquiposTablero() {
         selectB.innerHTML = '<option value="">Seleccionar...</option>';
         
         // Cargar equipos desde la base de datos con sus logos
-        const { data: equipos, error } = await supabaseClient.from('equipos').select('*');
+        const { data: equipos, error } = await supabaseClient.from('equipos').select('id, nombre, logo_url, cupo_maximo');
         
         if (error || !equipos) {
             console.error('Error al cargar equipos:', error);
@@ -4901,7 +4900,7 @@ async function cargarPartidosEnVivoTablero() {
     
     const { data: partidos, error } = await supabaseClient
         .from('partidos')
-        .select('*')
+        .select('id, fecha_hora, finalizado, en_curso, equipo_a_id, equipo_b_id, categoria_id, cancha_id, goles_a, goles_b, tiempo_jugado, periodo, inicio_periodo')
         .eq('en_curso', true)
         .order('fecha_hora', { ascending: true });
     
@@ -5043,7 +5042,7 @@ function iniciarSincronizacionTablero(partidoId) {
         try {
             const { data: partido, error } = await supabaseClient
                 .from('partidos')
-                .select('*')
+                .select('id, equipo_a_id, equipo_b_id, en_curso, tiempo_jugado, periodo, inicio_periodo')
                 .eq('id', partidoActivoId)
                 .single();
             
@@ -5055,7 +5054,7 @@ function iniciarSincronizacionTablero(partidoId) {
             // Contar goles desde partido_eventos (más confiable)
             const { data: eventosGol, error: errorGol } = await supabaseClient
                 .from('partido_eventos')
-                .select('*')
+                .select('id, equipo_id')
                 .eq('partido_id', partidoActivoId)
                 .eq('tipo', 'gol');
             
@@ -5170,7 +5169,7 @@ function suscribirAPartido(partidoId) {
             const ev = payload.new;
             if (ev && ev.tipo === 'gol') {
                 // Recargar datos del partido para obtener goles actualizados
-                supabaseClient.from('partidos').select('*').eq('id', partidoId).single().then(function({ data }) {
+                supabaseClient.from('partidos').select('id, goles_a, goles_b').eq('id', partidoId).single().then(function({ data }) {
                     if (data) {
                         tableroScoreA = data.goles_a || 0;
                         tableroScoreB = data.goles_b || 0;

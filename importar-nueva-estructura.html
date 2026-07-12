@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Importar CSV - Nueva Estructura</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+        input { padding: 0.5rem; margin-right: 0.5rem; }
+        button { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Importar CSV - Nueva Estructura</h2>
+        <input type="file" id="csvFile" accept=".csv">
+        <button onclick="importar()" id="btnImportar">Importar</button>
+    </div>
+    <div class="card">
+        <h3>Log</h3>
+        <pre id="log"></pre>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            logEl.textContent += msg + '\n';
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function parseFecha(fecha) {
+            if (!fecha || fecha === '0' || fecha === '-   -' || fecha === '  -  -') return null;
+            const parts = fecha.split('/');
+            if (parts.length !== 3) return null;
+            const [mes, dia, anio] = parts;
+            return `${anio}-${mes}-${dia}`;
+        }
+
+        async function importar() {
+            const fileInput = document.getElementById('csvFile');
+            const btn = document.getElementById('btnImportar');
+            const file = fileInput.files[0];
+            
+            if (!file) return alert('Selecciona un archivo CSV');
+            btn.disabled = true;
+            btn.textContent = 'Importando...';
+            
+            log('Leyendo archivo CSV...');
+            
+            const text = await file.text();
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            
+            // Saltar primera línea (encabezado general)
+            const header = lines[1].split(',');
+            log(`Encabezado: ${header.slice(0, 5).join(', ')}...`);
+            
+            // Índices de columnas
+            const idxCiTitular = 0;
+            const idxNombreTitular = 1;
+            const idxApellidoTitular = 2;
+            const idxFechaTitular = 3;
+            const idxCodigoTitular = 5;
+            const idxCiConyuge = 6;
+            const idxNombreConyuge = 7;
+            const idxApellidoConyuge = 8;
+            const idxFechaConyuge = 9;
+            const idxCodigoConyuge = 11;
+            const idxCiHijo = 12;
+            const idxNombreHijo = 13;
+            const idxApellidoHijo = 14;
+            const idxFechaHijo = 15;
+            
+            const titulares = new Map(); // ci -> { ci, nombre, apellido, fecha_nacimiento, codigo }
+            const conyuges = []; // { ci_titular, ci, nombre, apellido, fecha_nacimiento }
+            const hijos = []; // { ci, nombre, apellido, fecha_nacimiento, padres: [ci_titular] }
+            const conyugeRelaciones = []; // { titular1_ci, titular2_ci }
+            
+            // Primera pasada: identificar todos los CI de titulares y sus códigos
+            const ciTitulares = new Set();
+            const codigoToCi = new Map(); // codigo -> ci del titular
+            for (let i = 2; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                const ciTitular = cols[idxCiTitular]?.trim();
+                const codigoTitular = cols[idxCodigoTitular]?.trim();
+                if (ciTitular && ciTitular !== '0' && ciTitular !== '') {
+                    ciTitulares.add(ciTitular);
+                    if (ciTitular === '2365691' || ciTitular === '2370824') {
+                        log(`  Titular ${ciTitular}: código='${codigoTitular}'`);
+                    }
+                    if (codigoTitular && codigoTitular !== '0' && codigoTitular !== '') {
+                        codigoToCi.set(codigoTitular, ciTitular);
+                    }
+                }
+            }
+            log(`Identificados ${ciTitulares.size} titulares en el CSV`);
+            log(`Identificados ${codigoToCi.size} códigos de titulares`);
+            log(`Código 4950 -> CI: ${codigoToCi.get('4950') || 'NO ENCONTRADO'}`);
+            log(`Código 2896 -> CI: ${codigoToCi.get('2896') || 'NO ENCONTRADO'}`);
+            
+            // Segunda pasada: procesar datos
+            for (let i = 2; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                
+                // Log para depurar filas específicas
+                if (i === 5999 || i === 6000) {
+                    log(`Fila ${i}: ${cols.slice(0, 5).join(', ')}...`);
+                    log(`  CI Titular: ${cols[idxCiTitular]}, Nombre: ${cols[idxNombreTitular]}`);
+                }
+                
+                const ciTitular = cols[idxCiTitular]?.trim();
+                const nombreTitular = cols[idxNombreTitular]?.trim();
+                const apellidoTitular = cols[idxApellidoTitular]?.trim();
+                const fechaTitular = parseFecha(cols[idxFechaTitular]?.trim());
+                const codigoTitular = cols[idxCodigoTitular]?.trim();
+                
+                const ciConyuge = cols[idxCiConyuge]?.trim();
+                const nombreConyuge = cols[idxNombreConyuge]?.trim();
+                const apellidoConyuge = cols[idxApellidoConyuge]?.trim();
+                const fechaConyuge = parseFecha(cols[idxFechaConyuge]?.trim());
+                const codigoConyuge = cols[idxCodigoConyuge]?.trim();
+                
+                const ciHijo = cols[idxCiHijo]?.trim();
+                const nombreHijo = cols[idxNombreHijo]?.trim();
+                const apellidoHijo = cols[idxApellidoHijo]?.trim();
+                const fechaHijo = parseFecha(cols[idxFechaHijo]?.trim());
+                
+                // Procesar titular
+                if (ciTitular && ciTitular !== '0' && nombreTitular && nombreTitular !== '0') {
+                    if (ciTitular === '2165876') {
+                        log(`Encontrado titular 2165876 en fila ${i}: ${nombreTitular} ${apellidoTitular}`);
+                    }
+                    if (!titulares.has(ciTitular)) {
+                        titulares.set(ciTitular, {
+                            ci: ciTitular,
+                            nombre: nombreTitular,
+                            apellido: apellidoTitular,
+                            fecha_nacimiento: fechaTitular,
+                            codigo: codigoTitular
+                        });
+                    }
+                }
+                
+                // Procesar cónyuge (solo si tiene datos válidos)
+                if (nombreConyuge && nombreConyuge !== '0' && nombreConyuge !== '1' && ciTitular) {
+                    if (ciTitular === '2365691' || ciTitular === '2370824') {
+                        log(`  Cónyuge para ${ciTitular}: CI=${ciConyuge}, Código=${codigoConyuge}, Nombre=${nombreConyuge}`);
+                    }
+                    // Usar códigos para relacionar cónyuges titulares
+                    if (codigoConyuge && codigoConyuge !== '0' && codigoToCi.has(codigoConyuge)) {
+                        // Cónyuge también es titular - crear relación por código
+                        const ciConyugeTitular = codigoToCi.get(codigoConyuge);
+                        if (ciConyugeTitular && ciConyugeTitular !== ciTitular) {
+                            conyugeRelaciones.push({
+                                titular1_ci: ciTitular,
+                                titular2_ci: ciConyugeTitular
+                            });
+                        }
+                    } else {
+                        if (ciTitular === '2365691' || ciTitular === '2370824') {
+                            log(`  Código ${codigoConyuge} no encontrado en mapa de códigos (mapa tiene ${codigoToCi.size} códigos)`);
+                        }
+                        // Cónyuge normal
+                        conyuges.push({
+                            ci_titular: ciTitular,
+                            ci: ciConyuge,
+                            nombre: nombreConyuge,
+                            apellido: apellidoConyuge,
+                            fecha_nacimiento: fechaConyuge
+                        });
+                    }
+                }
+                
+                // Procesar hijo
+                if (nombreHijo && nombreHijo !== '0' && ciTitular) {
+                    // Buscar si el hijo ya existe
+                    const hijoExistente = hijos.find(h => h.ci === ciHijo);
+                    if (hijoExistente) {
+                        // Agregar otro padre
+                        hijoExistente.padres.push(ciTitular);
+                    } else {
+                        hijos.push({
+                            ci: ciHijo,
+                            nombre: nombreHijo,
+                            apellido: apellidoHijo,
+                            fecha_nacimiento: fechaHijo,
+                            padres: [ciTitular]
+                        });
+                    }
+                }
+            }
+            
+            log(`Parseo: ${titulares.size} titulares, ${conyuges.length} cónyuges, ${hijos.length} hijos, ${conyugeRelaciones.length} relaciones cónyuge`);
+            
+            // ---- INSERTAR/ACTUALIZAR TITULARES ----
+            log('Insertando/actualizando titulares...');
+            const arrT = Array.from(titulares.values());
+            const ciToId = new Map();
+            const B = 50;
+            
+            for (let i = 0; i < arrT.length; i += B) {
+                const batch = arrT.slice(i, i + B).map(t => ({
+                    ci: t.ci,
+                    nombre: t.nombre,
+                    apellido: t.apellido,
+                    fecha_nacimiento: t.fecha_nacimiento,
+                    habilitado: true
+                }));
+                
+                const { data, error } = await supa.from('titulares').upsert(batch, { onConflict: 'ci' }).select();
+                if (error) {
+                    log(`Error insertando titulares: ${error.message}`);
+                    continue;
+                }
+                data.forEach(r => {
+                    ciToId.set(r.ci, r.id);
+                    if (r.ci === '2165876') {
+                        log(`✓ Titular 2165876 insertado con ID: ${r.id}`);
+                    }
+                });
+                log(`  Titulares: ${Math.min(i + B, arrT.length)}/${arrT.length}`);
+            }
+            log(`✓ ${ciToId.size} titulares insertados/actualizados`);
+            
+            // ---- INSERTAR CÓNYUGES ----
+            log('Insertando cónyuges...');
+            const conyugesConCI = [];
+            const conyugesSinCI = [];
+            
+            for (const c of conyuges) {
+                const tid = ciToId.get(c.ci_titular);
+                if (tid) {
+                    if (c.ci && c.ci !== '0' && c.ci !== '') {
+                        conyugesConCI.push({ ...c, titular_id: tid });
+                    } else {
+                        conyugesSinCI.push({ ...c, titular_id: tid });
+                    }
+                }
+            }
+            
+            // Insertar/actualizar cónyuges con CI
+            for (let i = 0; i < conyugesConCI.length; i += B) {
+                const batch = conyugesConCI.slice(i, i + B).map(c => ({
+                    ci: c.ci,
+                    nombre: c.nombre,
+                    apellido: c.apellido,
+                    fecha_nacimiento: c.fecha_nacimiento,
+                    titular_id: c.titular_id,
+                    habilitado: true
+                }));
+                await supa.from('conyuges').upsert(batch, { onConflict: 'ci' });
+                log(`  Cónyuges con CI: ${Math.min(i + B, conyugesConCI.length)}/${conyugesConCI.length}`);
+            }
+            
+            // Insertar cónyuges sin CI
+            for (let i = 0; i < conyugesSinCI.length; i += B) {
+                const batch = conyugesSinCI.slice(i, i + B).map(c => ({
+                    nombre: c.nombre,
+                    apellido: c.apellido,
+                    fecha_nacimiento: c.fecha_nacimiento,
+                    titular_id: c.titular_id,
+                    habilitado: true
+                }));
+                await supa.from('conyuges').insert(batch);
+                log(`  Cónyuges sin CI: ${Math.min(i + B, conyugesSinCI.length)}/${conyugesSinCI.length}`);
+            }
+            log(`✓ ${conyugesConCI.length + conyugesSinCI.length} cónyuges insertados`);
+            
+            // ---- INSERTAR HIJOS ----
+            log('Insertando hijos...');
+            const hijosConCI = [];
+            const hijosSinCI = [];
+            
+            for (const h of hijos) {
+                if (h.ci && h.ci !== '0' && h.ci !== '') {
+                    hijosConCI.push(h);
+                } else {
+                    hijosSinCI.push(h);
+                }
+            }
+            
+            // Insertar/actualizar hijos con CI
+            const hijoCiToId = new Map();
+            for (let i = 0; i < hijosConCI.length; i += B) {
+                const batch = hijosConCI.slice(i, i + B).map(h => ({
+                    ci: h.ci,
+                    nombre: h.nombre,
+                    apellido: h.apellido,
+                    fecha_nacimiento: h.fecha_nacimiento,
+                    habilitado: true
+                }));
+                const { data, error } = await supa.from('hijos').upsert(batch, { onConflict: 'ci' }).select();
+                if (error) {
+                    log(`Error insertando hijos: ${error.message}`);
+                    continue;
+                }
+                data.forEach(r => hijoCiToId.set(r.ci, r.id));
+                log(`  Hijos con CI: ${Math.min(i + B, hijosConCI.length)}/${hijosConCI.length}`);
+            }
+            
+            // Insertar hijos sin CI
+            const hijoSinCiToId = new Map();
+            for (let i = 0; i < hijosSinCI.length; i += B) {
+                const batch = hijosSinCI.slice(i, i + B).map(h => ({
+                    nombre: h.nombre,
+                    apellido: h.apellido,
+                    fecha_nacimiento: h.fecha_nacimiento,
+                    habilitado: true
+                }));
+                const { data, error } = await supa.from('hijos').insert(batch).select();
+                if (error) {
+                    log(`Error insertando hijos sin CI: ${error.message}`);
+                    continue;
+                }
+                // Guardar referencia temporal por índice
+                batch.forEach((h, idx) => {
+                    if (data[idx]) {
+                        hijoSinCiToId.set(i + idx, data[idx].id);
+                    }
+                });
+                log(`  Hijos sin CI: ${Math.min(i + B, hijosSinCI.length)}/${hijosSinCI.length}`);
+            }
+            log(`✓ ${hijosConCI.length + hijosSinCI.length} hijos insertados`);
+            
+            // ---- INSERTAR RELACIONES HIJO-TITULAR ----
+            log('Insertando relaciones hijo-titular...');
+            const relacionesHijoTitular = [];
+            
+            for (const h of hijos) {
+                let hijoId;
+                if (h.ci && hijoCiToId.has(h.ci)) {
+                    hijoId = hijoCiToId.get(h.ci);
+                } else {
+                    // Buscar por índice en hijosSinCI
+                    const idx = hijosSinCI.indexOf(h);
+                    if (idx !== -1 && hijoSinCiToId.has(idx)) {
+                        hijoId = hijoSinCiToId.get(idx);
+                    }
+                }
+                
+                if (hijoId) {
+                    for (const padreCi of h.padres) {
+                        const titularId = ciToId.get(padreCi);
+                        if (titularId) {
+                            relacionesHijoTitular.push({
+                                hijo_id: hijoId,
+                                titular_id: titularId
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Insertar en lotes
+            for (let i = 0; i < relacionesHijoTitular.length; i += B) {
+                const batch = relacionesHijoTitular.slice(i, i + B);
+                await supa.from('hijo_titular').insert(batch);
+                log(`  Relaciones hijo-titular: ${Math.min(i + B, relacionesHijoTitular.length)}/${relacionesHijoTitular.length}`);
+            }
+            log(`✓ ${relacionesHijoTitular.length} relaciones hijo-titular insertadas`);
+            
+            // ---- INSERTAR RELACIONES CÓNYUGE (ambos titulares) ----
+            log('Insertando relaciones cónyuge (ambos titulares)...');
+            let insertadasCount = 0;
+            for (const rel of conyugeRelaciones) {
+                const t1Id = ciToId.get(rel.titular1_ci);
+                const t2Id = ciToId.get(rel.titular2_ci);
+                if (rel.titular1_ci === '2365691' || rel.titular2_ci === '2365691') {
+                    log(`  Intentando insertar relación: ${rel.titular1_ci} (ID: ${t1Id}) - ${rel.titular2_ci} (ID: ${t2Id})`);
+                }
+                if (t1Id && t2Id) {
+                    const { error } = await supa.from('conyuge_relacion').insert({
+                        titular1_id: t1Id,
+                        titular2_id: t2Id
+                    });
+                    if (error) {
+                        log(`  Error insertando relación ${rel.titular1_ci}-${rel.titular2_ci}: ${error.message}`);
+                    } else {
+                        insertadasCount++;
+                    }
+                } else {
+                    if (rel.titular1_ci === '2365691' || rel.titular2_ci === '2365691') {
+                        log(`  No se encontraron IDs: t1Id=${t1Id}, t2Id=${t2Id}`);
+                    }
+                }
+            }
+            log(`✓ ${insertadasCount}/${conyugeRelaciones.length} relaciones cónyuge insertadas`);
+            
+            // Verificar si la relación 2365691-2370824 se insertó
+            const { data: relCheck } = await supa.from('conyuge_relacion')
+                .select('id, titular1_id, titular2_id')
+                .eq('titular1_id', ciToId.get('2365691'))
+                .eq('titular2_id', ciToId.get('2370824'))
+                .maybeSingle();
+            if (relCheck) {
+                log(`✓ Relación 2365691-2370824 insertada correctamente`);
+            } else {
+                log(`✗ Relación 2365691-2370824 NO se insertó`);
+            }
+            
+            log('✓ Importación completada');
+            btn.disabled = false;
+            btn.textContent = 'Importar';
+        }
+    </script>
+</body>
+</html>

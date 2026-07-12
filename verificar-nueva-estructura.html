@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Verificar Nueva Estructura</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+        input { padding: 0.5rem; margin-right: 0.5rem; }
+        button { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Verificar Nueva Estructura</h2>
+        <input type="text" id="ciInput" placeholder="Ingresa CI" value="2165876">
+        <button onclick="verificar()">Verificar</button>
+        <button onclick="verificarTotales()">Verificar Totales</button>
+    </div>
+    <div class="card">
+        <h3>Resultados</h3>
+        <pre id="result"></pre>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function verificar() {
+            const ci = document.getElementById('ciInput').value;
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Buscando...';
+            
+            let output = '';
+            
+            // Buscar en titulares
+            const { data: titular } = await supa.from('titulares').select('id, ci, nombre, apellido, fecha_nacimiento, habilitado').eq('ci', ci).maybeSingle();
+            if (titular) {
+                output += `=== TITULAR ===\n`;
+                output += `ID: ${titular.id}\n`;
+                output += `CI: ${titular.ci}\n`;
+                output += `Nombre: ${titular.nombre} ${titular.apellido}\n`;
+                output += `Fecha Nacimiento: ${titular.fecha_nacimiento || 'N/A'}\n`;
+                output += `Habilitado: ${titular.habilitado}\n\n`;
+                
+                // Buscar cónyuges
+                const { data: conyuges } = await supa.from('conyuges').select('id, ci, nombre, apellido').eq('titular_id', titular.id);
+                if (conyuges && conyuges.length > 0) {
+                    output += `=== CÓNYUGES (${conyuges.length}) ===\n`;
+                    conyuges.forEach(c => {
+                        output += `- ${c.nombre} ${c.apellido} (CI: ${c.ci || 'N/A'})\n`;
+                    });
+                    output += '\n';
+                }
+                
+                // Buscar cónyuge titular
+                const { data: conyugeRel } = await supa.from('conyuge_relacion').select('id, titular1_id, titular2_id').eq('titular1_id', titular.id).maybeSingle();
+                output += `DEBUG: Buscando cónyuge con titular1_id=${titular.id}, resultado=${conyugeRel ? 'encontrado' : 'no encontrado'}\n`;
+                if (conyugeRel) {
+                    // Obtener datos del cónyuge titular
+                    const { data: conyugeTitular } = await supa.from('titulares').select('id, ci, nombre, apellido, fecha_nacimiento, habilitado').eq('id', conyugeRel.titular2_id).maybeSingle();
+                    if (conyugeTitular) {
+                        output += `=== CÓNYUGE TITULAR ===\n`;
+                        output += `- ${conyugeTitular.nombre} ${conyugeTitular.apellido} (CI: ${conyugeTitular.ci})\n\n`;
+                    }
+                }
+                
+                // Buscar también como titular2
+                const { data: conyugeRel2 } = await supa.from('conyuge_relacion').select('id, titular1_id, titular2_id').eq('titular2_id', titular.id).maybeSingle();
+                output += `DEBUG: Buscando cónyuge con titular2_id=${titular.id}, resultado=${conyugeRel2 ? 'encontrado' : 'no encontrado'}\n`;
+                if (conyugeRel2) {
+                    // Obtener datos del cónyuge titular
+                    const { data: conyugeTitular2 } = await supa.from('titulares').select('id, ci, nombre, apellido, fecha_nacimiento, habilitado').eq('id', conyugeRel2.titular1_id).maybeSingle();
+                    if (conyugeTitular2) {
+                        output += `=== CÓNYUGE TITULAR (como titular2) ===\n`;
+                        output += `- ${conyugeTitular2.nombre} ${conyugeTitular2.apellido} (CI: ${conyugeTitular2.ci})\n\n`;
+                    }
+                }
+                
+                // Buscar hijos
+                const { data: hijoRelaciones } = await supa.from('hijo_titular').select('hijo:hijos(*)').eq('titular_id', titular.id);
+                if (hijoRelaciones && hijoRelaciones.length > 0) {
+                    output += `=== HIJOS (${hijoRelaciones.length}) ===\n`;
+                    hijoRelaciones.forEach(hr => {
+                        if (hr.hijo) {
+                            output += `- ${hr.hijo.nombre} ${hr.hijo.apellido} (CI: ${hr.hijo.ci || 'N/A'}, Fecha: ${hr.hijo.fecha_nacimiento || 'N/A'})\n`;
+                        }
+                    });
+                }
+            } else {
+                // Buscar en cónyuges
+                const { data: conyuge } = await supa.from('conyuges').select('*, titular:titulares(*)').eq('ci', ci).maybeSingle();
+                if (conyuge) {
+                    output += `=== CÓNYUGE ===\n`;
+                    output += `ID: ${conyuge.id}\n`;
+                    output += `CI: ${conyuge.ci}\n`;
+                    output += `Nombre: ${conyuge.nombre} ${conyuge.apellido}\n`;
+                    output += `Titular: ${conyuge.titular ? conyuge.titular.nombre + ' ' + conyuge.titular.apellido : 'N/A'}\n\n`;
+                } else {
+                    // Buscar en hijos
+                    const { data: hijo } = await supa.from('hijos').select('id, ci, nombre, apellido, fecha_nacimiento').eq('ci', ci).maybeSingle();
+                    if (hijo) {
+                        output += `=== HIJO ===\n`;
+                        output += `ID: ${hijo.id}\n`;
+                        output += `CI: ${hijo.ci}\n`;
+                        output += `Nombre: ${hijo.nombre} ${hijo.apellido}\n`;
+                        output += `Fecha Nacimiento: ${hijo.fecha_nacimiento || 'N/A'}\n\n`;
+                        
+                        // Buscar padres
+                        const { data: padreRelaciones } = await supa.from('hijo_titular').select('titular:titulares(*)').eq('hijo_id', hijo.id);
+                        if (padreRelaciones && padreRelaciones.length > 0) {
+                            output += `=== PADRES (${padreRelaciones.length}) ===\n`;
+                            padreRelaciones.forEach(pr => {
+                                if (pr.titular) {
+                                    output += `- ${pr.titular.nombre} ${pr.titular.apellido} (CI: ${pr.titular.ci})\n`;
+                                }
+                            });
+                        }
+                    } else {
+                        output += 'No encontrado en ninguna tabla\n';
+                    }
+                }
+            }
+            
+            resultEl.textContent = output;
+        }
+        
+        async function verificarTotales() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Contando...';
+            
+            let output = '';
+            
+            const { count: titularesCount } = await supa.from('titulares').select('id', { count: 'exact', head: true });
+            const { count: conyugesCount } = await supa.from('conyuges').select('id', { count: 'exact', head: true });
+            const { count: hijosCount } = await supa.from('hijos').select('id', { count: 'exact', head: true });
+            const { count: hijoTitularCount } = await supa.from('hijo_titular').select('id', { count: 'exact', head: true });
+            const { count: conyugeRelCount } = await supa.from('conyuge_relacion').select('id', { count: 'exact', head: true });
+            
+            output += `=== TOTALES ===\n`;
+            output += `Titulares: ${titularesCount || 0}\n`;
+            output += `Cónyuges: ${conyugesCount || 0}\n`;
+            output += `Hijos: ${hijosCount || 0}\n`;
+            output += `Relaciones Hijo-Titular: ${hijoTitularCount || 0}\n`;
+            output += `Relaciones Cónyuge (ambos titulares): ${conyugeRelCount || 0}\n`;
+            
+            resultEl.textContent = output;
+        }
+    </script>
+</body>
+</html>

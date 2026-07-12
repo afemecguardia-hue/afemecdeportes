@@ -1,0 +1,2994 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparar CSV con Supabase</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .file-input {
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        th {
+            background: #f8f9fa;
+            position: sticky;
+            top: 0;
+        }
+        .diff-row {
+            background: #fff3cd;
+        }
+        .match-row {
+            background: #d4edda;
+        }
+        .missing-row {
+            background: #f8d7da;
+        }
+        .editable {
+            background: #e3f2fd;
+            cursor: pointer;
+        }
+        .editable:focus {
+            outline: 2px solid #007bff;
+            background: white;
+        }
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .status-match {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-diff {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-missing {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading.active {
+            display: block;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #007bff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-controls select,
+        .filter-controls input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Comparar CSV con Supabase</h1>
+        
+        <div class="controls">
+            <div class="file-input">
+                <label for="csvFile">Seleccionar archivo CSV (nuevo socios + adh.csv):</label>
+                <input type="file" id="csvFile" accept=".csv" />
+            </div>
+            
+            <div class="filter-controls">
+                <select id="filterStatus">
+                    <option value="all">Todos los registros</option>
+                    <option value="diff">Con diferencias</option>
+                    <option value="match">Coincidentes</option>
+                    <option value="missing">Faltantes en Supabase</option>
+                </select>
+                <input type="text" id="searchCI" placeholder="Buscar por CI..." />
+                <button id="applyFilter">Filtrar</button>
+            </div>
+            
+            <button id="loadCSV">Cargar CSV</button>
+            <button id="loadSupabase">Cargar datos de Supabase</button>
+            <button id="compare">Comparar</button>
+            <button id="validateCSV">Validar CSV</button>
+            <button id="insertMissing">Insertar faltantes en Supabase</button>
+            <button id="processConyuges">Procesar cónyuges del CSV</button>
+            <button id="processHijos">Procesar hijos del CSV</button>
+            <button id="generarCSVHijos">Generar CSV hijos (original)</button>
+            <button id="generarCSVHijosParaSupabase">Generar CSV hijos (para Supabase)</button>
+            <button id="generarCSVPlantillaHijos">Generar plantilla CSV vacía</button>
+            <button id="limpiarHijosCompletamente">⚠️ LIMPIAR HIJOS COMPLETAMENTE</button>
+            <button id="recrearRelacionesHijoTitular">Recrear relaciones hijo_titular</button>
+            <button id="limpiarConyugesDuplicados">Limpiar cónyuges duplicados (socios)</button>
+            <button id="limpiarRelacionesHijoTitular">Limpiar relaciones hijo_titular duplicadas</button>
+            <button id="limpiarHijosDuplicados">Limpiar hijos duplicados (registros)</button>
+            <button id="diagnosticarHijosTitular">Diagnosticar hijos de titular</button>
+            <button id="limpiarHijosDuplicadosTitular">Limpiar hijos duplicados de titular</button>
+            <button id="investigarHijosMultiplesTitulares">Investigar hijos con múltiples titulares</button>
+            <button id="limpiarHijosDuplicadosTodos">Limpiar hijos duplicados de TODOS</button>
+            <button id="eliminarHijoHugoEstigarribia">Eliminar hijo HUGO AMILCAR ESTIGARRIBIA CABALLERO</button>
+            <button id="verificarEstadoBD">Verificar estado BD</button>
+            <button id="saveChanges">Guardar cambios en Supabase</button>
+            <button id="exportCSV">Exportar CSV corregido</button>
+        </div>
+        
+        <div id="validationReport" style="display: none; margin: 20px 0; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 5px;">
+            <h3>Reporte de Validación CSV</h3>
+            <textarea id="validationReportText" style="width: 100%; height: 300px; font-family: monospace; padding: 10px;" readonly></textarea>
+            <button onclick="copyValidationReport()" style="margin-top: 10px;">Copiar Reporte</button>
+        </div>
+        
+        <div id="diagnosticoReport" style="display: none; margin: 20px 0; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 5px;">
+            <h3>Reporte de Diagnóstico de Hijos</h3>
+            <textarea id="diagnosticoReportText" style="width: 100%; height: 300px; font-family: monospace; padding: 10px;" readonly></textarea>
+            <button onclick="copyDiagnosticoReport()" style="margin-top: 10px;">Copiar Reporte</button>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="csvCount">0</div>
+                <div class="stat-label">Registros en CSV</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="supabaseCount">0</div>
+                <div class="stat-label">Registros en Supabase</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="matchCount">0</div>
+                <div class="stat-label">Coincidentes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="diffCount">0</div>
+                <div class="stat-label">Con diferencias</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="missingCount">0</div>
+                <div class="stat-label">Faltantes en Supabase</div>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <p>Cargando datos...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="loadingText">0%</p>
+        </div>
+        
+        <div class="table-container">
+            <table id="comparisonTable">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th>CI</th>
+                        <th>Nombre (CSV)</th>
+                        <th>Apellido (CSV)</th>
+                        <th>Nombre (Supabase)</th>
+                        <th>Apellido (Supabase)</th>
+                        <th>Cónyuges (CSV)</th>
+                        <th>Cónyuges (Supabase)</th>
+                        <th>Hijos (CSV)</th>
+                        <th>Hijos (Supabase)</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="11" style="text-align: center;">Carga el archivo CSV para comenzar</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de Supabase (preconfigurado)
+        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
+        
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let csvData = [];
+        let supabaseData = [];
+        let comparisonResults = [];
+        let filteredResults = [];
+        
+        // Elementos DOM
+        const csvFileInput = document.getElementById('csvFile');
+        const loadCSVBtn = document.getElementById('loadCSV');
+        const loadSupabaseBtn = document.getElementById('loadSupabase');
+        const compareBtn = document.getElementById('compare');
+        const saveChangesBtn = document.getElementById('saveChanges');
+        const exportCSVBtn = document.getElementById('exportCSV');
+        const insertMissingBtn = document.getElementById('insertMissing');
+        const validateCSVBtn = document.getElementById('validateCSV');
+        const processConyugesBtn = document.getElementById('processConyuges');
+        const processHijosBtn = document.getElementById('processHijos');
+        const filterStatus = document.getElementById('filterStatus');
+        const searchCI = document.getElementById('searchCI');
+        const applyFilterBtn = document.getElementById('applyFilter');
+        const tableBody = document.getElementById('tableBody');
+        const loading = document.getElementById('loading');
+        const progressFill = document.getElementById('progressFill');
+        const loadingText = document.getElementById('loadingText');
+        
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM cargado, inicializando...');
+            
+            csvFileInput.addEventListener('change', handleFileSelect);
+            loadCSVBtn.addEventListener('click', loadCSV);
+            loadSupabaseBtn.addEventListener('click', loadSupabaseData);
+            compareBtn.addEventListener('click', compareData);
+            validateCSVBtn.addEventListener('click', validateCSV);
+            insertMissingBtn.addEventListener('click', insertMissingRecords);
+            processConyugesBtn.addEventListener('click', processConyuges);
+            processHijosBtn.addEventListener('click', processHijos);
+            document.getElementById('generarCSVHijos').addEventListener('click', generarCSVHijos);
+            document.getElementById('generarCSVHijosParaSupabase').addEventListener('click', generarCSVHijosParaSupabase);
+            document.getElementById('generarCSVPlantillaHijos').addEventListener('click', generarCSVPlantillaHijos);
+            document.getElementById('limpiarHijosCompletamente').addEventListener('click', limpiarHijosCompletamente);
+            document.getElementById('recrearRelacionesHijoTitular').addEventListener('click', recrearRelacionesHijoTitular);
+            document.getElementById('limpiarConyugesDuplicados').addEventListener('click', limpiarConyugesDuplicados);
+            document.getElementById('limpiarRelacionesHijoTitular').addEventListener('click', limpiarRelacionesHijoTitular);
+            document.getElementById('limpiarHijosDuplicados').addEventListener('click', limpiarHijosDuplicados);
+            document.getElementById('diagnosticarHijosTitular').addEventListener('click', diagnosticarHijosTitular);
+            document.getElementById('limpiarHijosDuplicadosTitular').addEventListener('click', limpiarHijosDuplicadosTitular);
+            document.getElementById('investigarHijosMultiplesTitulares').addEventListener('click', investigarHijosMultiplesTitulares);
+            document.getElementById('limpiarHijosDuplicadosTodos').addEventListener('click', limpiarHijosDuplicadosTodos);
+            document.getElementById('eliminarHijoHugoEstigarribia').addEventListener('click', eliminarHijoHugoEstigarribia);
+            document.getElementById('verificarEstadoBD').addEventListener('click', verificarEstadoBD);
+            saveChangesBtn.addEventListener('click', saveChanges);
+            exportCSVBtn.addEventListener('click', exportCSV);
+            applyFilterBtn.addEventListener('click', applyFilter);
+            
+            console.log('Event listeners agregados');
+        });
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            console.log('Archivo seleccionado:', file);
+            if (file) {
+                // Archivo seleccionado, listo para cargar
+            }
+        }
+        
+        async function loadCSV() {
+            console.log('loadCSV llamado');
+            const file = csvFileInput.files[0];
+            console.log('Archivo:', file);
+            if (!file) {
+                alert('Por favor selecciona un archivo CSV primero');
+                return;
+            }
+            
+            showLoading(true);
+            updateProgress(10, 'Leyendo archivo CSV...');
+            
+            try {
+                const text = await file.text();
+                console.log('Texto del CSV leído, longitud:', text.length);
+                csvData = parseCSV(text);
+                console.log('CSV parseado:', csvData.length, 'registros');
+                
+                updateProgress(100, 'CSV cargado');
+                document.getElementById('csvCount').textContent = csvData.length;
+                
+                // Mostrar datos del CSV en la tabla
+                renderCSVPreview();
+                
+                showLoading(false);
+                alert(`CSV cargado: ${csvData.length} registros`);
+            } catch (error) {
+                console.error('Error al cargar CSV:', error);
+                showLoading(false);
+                alert('Error al cargar CSV: ' + error.message);
+            }
+        }
+        
+        function parseCSV(text) {
+            const lines = text.split('\n');
+            console.log('Primera línea (headers):', lines[0]);
+            console.log('Segunda línea (primer dato):', lines[1]);
+            
+            // Detectar separador (coma o punto y coma)
+            const firstLine = lines[0];
+            const separator = firstLine.includes(';') ? ';' : ',';
+            console.log('Separador detectado:', separator);
+            
+            const headers = firstLine.split(separator).map(h => h.trim().replace(/"/g, ''));
+            console.log('Headers:', headers);
+            
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = lines[i].split(separator);
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index] ? values[index].trim().replace(/"/g, '') : '';
+                    });
+                    data.push(row);
+                }
+            }
+            
+            console.log('Primer registro parseado:', data[0]);
+            return data;
+        }
+        
+        function validateCSV() {
+            if (csvData.length === 0) {
+                alert('Por favor carga el CSV primero');
+                return;
+            }
+            
+            const errors = [];
+            const warnings = [];
+            const ciSet = new Set();
+            const ciDuplicates = [];
+            
+            console.log('Validando CSV...');
+            
+            csvData.forEach((row, index) => {
+                const ci = row['socio cedula_a'] || row['socio cedula'] || '';
+                const nombre = row['socio nombre_a'] || row['socio nombre'] || '';
+                const apellido = row['socio apellido_a'] || row['socio apellido'] || '';
+                const fechaNac = row['socio fecha_nac_'] || '';
+                const conyugeNombre = row['conyugue c_nombre'] || '';
+                const conyugeApellido = row['conyugue c_apellido'] || '';
+                const adherenteNombre = row['adherente nombre_b'] || '';
+                const adherenteApellido = row['adherente apellido_b'] || '';
+                
+                // Validar CI
+                if (!ci || ci.trim() === '') {
+                    errors.push(`Fila ${index + 2}: CI vacío`);
+                } else if (ciSet.has(ci)) {
+                    ciDuplicates.push(ci);
+                    warnings.push(`Fila ${index + 2}: CI duplicado: ${ci}`);
+                } else {
+                    ciSet.add(ci);
+                }
+                
+                // Validar nombre
+                if (!nombre || nombre.trim() === '') {
+                    errors.push(`Fila ${index + 2}: Nombre del socio vacío`);
+                }
+                
+                // Validar apellido
+                if (!apellido || apellido.trim() === '') {
+                    errors.push(`Fila ${index + 2}: Apellido del socio vacío`);
+                }
+                
+                // Validar fecha de nacimiento
+                if (fechaNac && fechaNac.trim() !== '') {
+                    // Verificar formato de fecha (esperado: M/D/YYYY o D/M/YYYY)
+                    const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+                    if (!datePattern.test(fechaNac)) {
+                        warnings.push(`Fila ${index + 2}: Fecha de nacimiento con formato incorrecto: ${fechaNac} (esperado: M/D/YYYY o D/M/YYYY)`);
+                    }
+                }
+                
+                // Validar caracteres especiales problemáticos
+                const specialChars = /[<>\"'&]/;
+                if (specialChars.test(nombre)) {
+                    warnings.push(`Fila ${index + 2}: Nombre contiene caracteres especiales: ${nombre}`);
+                }
+                if (specialChars.test(apellido)) {
+                    warnings.push(`Fila ${index + 2}: Apellido contiene caracteres especiales: ${apellido}`);
+                }
+                
+                // Validar cónyuge si existe
+                if (conyugeNombre && !conyugeApellido) {
+                    warnings.push(`Fila ${index + 2}: Cónyuge tiene nombre pero no apellido`);
+                }
+                if (!conyugeNombre && conyugeApellido) {
+                    warnings.push(`Fila ${index + 2}: Cónyuge tiene apellido pero no nombre`);
+                }
+                
+                // Validar adherente si existe
+                if (adherenteNombre && !adherenteApellido) {
+                    warnings.push(`Fila ${index + 2}: Adherente tiene nombre pero no apellido`);
+                }
+                if (!adherenteNombre && adherenteApellido) {
+                    warnings.push(`Fila ${index + 2}: Adherente tiene apellido pero no nombre`);
+                }
+            });
+            
+            // Resumen
+            console.log('Validación completada:');
+            console.log('- Errores:', errors.length);
+            console.log('- Advertencias:', warnings.length);
+            console.log('- CIs duplicados:', ciDuplicates.length);
+            
+            // Mostrar resultados en una ventana modal o alert
+            let report = `=== REPORTE DE VALIDACIÓN CSV ===\n\n`;
+            report += `Total registros: ${csvData.length}\n`;
+            report += `CIs únicos: ${ciSet.size}\n`;
+            report += `CIs duplicados: ${ciDuplicates.length}\n`;
+            report += `Errores: ${errors.length}\n`;
+            report += `Advertencias: ${warnings.length}\n\n`;
+            
+            if (errors.length > 0) {
+                report += `=== ERRORES (deben corregirse) ===\n`;
+                errors.slice(0, 20).forEach(err => report += `❌ ${err}\n`);
+                if (errors.length > 20) report += `... y ${errors.length - 20} errores más\n\n`;
+            }
+            
+            if (warnings.length > 0) {
+                report += `=== ADVERTENCIAS (revisar) ===\n`;
+                warnings.slice(0, 20).forEach(warn => report += `⚠️ ${warn}\n`);
+                if (warnings.length > 20) report += `... y ${warnings.length - 20} advertencias más\n\n`;
+            }
+            
+            if (ciDuplicates.length > 0) {
+                report += `=== CIs DUPLICADOS ===\n`;
+                const uniqueDuplicates = [...new Set(ciDuplicates)].slice(0, 10);
+                uniqueDuplicates.forEach(ci => report += `🔁 ${ci}\n`);
+                if (uniqueDuplicates.length < ciDuplicates.length) report += `... y más\n\n`;
+            }
+            
+            if (errors.length === 0 && warnings.length === 0) {
+                report += `✅ CSV válido. No se encontraron errores.`;
+            }
+            
+            // Mostrar en textarea en lugar de alert
+            document.getElementById('validationReport').style.display = 'block';
+            document.getElementById('validationReportText').value = report;
+            
+            // También mostrar en consola para referencia
+            console.log('Errores:', errors);
+            console.log('Advertencias:', warnings);
+            console.log('CIs duplicados:', [...new Set(ciDuplicates)]);
+        }
+        
+        function copyValidationReport() {
+            const textarea = document.getElementById('validationReportText');
+            textarea.select();
+            document.execCommand('copy');
+            alert('Reporte copiado al portapapeles');
+        }
+        
+        function copyDiagnosticoReport() {
+            const textarea = document.getElementById('diagnosticoReportText');
+            textarea.select();
+            document.execCommand('copy');
+            alert('Reporte de diagnóstico copiado al portapapeles');
+        }
+        
+        function renderCSVPreview() {
+            tableBody.innerHTML = '';
+            
+            // Mostrar primeros 100 registros como vista previa
+            const previewLimit = Math.min(csvData.length, 100);
+            
+            for (let i = 0; i < previewLimit; i++) {
+                const row = csvData[i];
+                const tr = document.createElement('tr');
+                tr.className = 'match-row';
+                
+                const ci = row['socio cedula_a'] || '';
+                const nombre = row['socio nombre_a'] || '';
+                const apellido = row['socio apellido_a'] || '';
+                const conyugeNombre = row['conyugue c_nombre'] || '';
+                const conyugeApellido = row['conyugue c_apellido'] || '';
+                const adherenteNombre = row['adherente nombre_b'] || '';
+                const adherenteApellido = row['adherente apellido_b'] || '';
+                
+                tr.innerHTML = `
+                    <td><span class="status-badge status-match">CSV</span></td>
+                    <td>${ci}</td>
+                    <td>${nombre}</td>
+                    <td>${apellido}</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>${conyugeNombre} ${conyugeApellido}</td>
+                    <td>-</td>
+                    <td>${adherenteNombre} ${adherenteApellido}</td>
+                    <td>-</td>
+                    <td>-</td>
+                `;
+                
+                tableBody.appendChild(tr);
+            }
+            
+            if (csvData.length > 100) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="11" style="text-align: center; font-weight: bold;">... y ${csvData.length - 100} registros más (carga datos de Supabase para comparar)</td>`;
+                tableBody.appendChild(tr);
+            }
+        }
+        
+        async function loadSupabaseData() {
+            // Las credenciales ya están preconfiguradas
+            
+            showLoading(true);
+            updateProgress(10, 'Cargando titulares...');
+            
+            try {
+                // Cargar titulares con paginación para superar el límite de 1000
+                let allTitulares = [];
+                let from = 0;
+                let to = 999;
+                let hasMore = true;
+                
+                while (hasMore) {
+                    const { data: titulares, error: titularesError } = await supabaseClient
+                        .from('titulares')
+                        .select('id, ci, nombre, apellido, fecha_nacimiento, habilitado, telefono')
+                        .range(from, to);
+                    
+                    if (conyugesError) throw conyugesError;
+                    
+                    if (conyuges && conyuges.length > 0) {
+                        allConyuges = allConyuges.concat(conyuges);
+                        from += 1000;
+                        to += 1000;
+                    } else {
+                        hasMore = false;
+                    }
+                }
+                
+                const conyuges = allConyuges;
+                console.log('Cónyuges cargados:', conyuges?.length || 0);
+                
+                updateProgress(60, 'Cargando hijos...');
+                
+                // Cargar hijos con paginación
+                let allHijos = [];
+                from = 0;
+                to = 999;
+                hasMore = true;
+                
+                while (hasMore) {
+                    const { data: hijos, error: hijosError } = await supabaseClient
+                        .from('hijos')
+                        .select('id, ci, nombre, apellido, fecha_nacimiento, titular_id')
+                        .range(from, to);
+                    
+                    if (hijoTitularError) throw hijoTitularError;
+                    
+                    if (hijoTitular && hijoTitular.length > 0) {
+                        allHijoTitular = allHijoTitular.concat(hijoTitular);
+                        from += 1000;
+                        to += 1000;
+                    } else {
+                        hasMore = false;
+                    }
+                }
+                
+                const hijoTitular = allHijoTitular;
+                console.log('Relaciones hijo_titular cargadas:', hijoTitular?.length || 0);
+                
+                // Organizar datos por CI
+                supabaseData = {};
+                
+                console.log('Organizando datos por CI...');
+                titulares.forEach(t => {
+                    supabaseData[t.ci] = {
+                        titular: t,
+                        conyuges: [],
+                        hijos: []
+                    };
+                });
+                console.log('Titulares organizados:', Object.keys(supabaseData).length);
+                
+                conyuges.forEach(c => {
+                    const titular = titulares.find(t => t.id === c.titular_id);
+                    if (titular && supabaseData[titular.ci]) {
+                        supabaseData[titular.ci].conyuges.push(c);
+                    }
+                });
+                console.log('Cónyuges organizados');
+                
+                hijos.forEach(h => {
+                    const relaciones = hijoTitular.filter(ht => ht.hijo_id === h.id);
+                    relaciones.forEach(ht => {
+                        const titular = titulares.find(t => t.id === ht.titular_id);
+                        if (titular && supabaseData[titular.ci]) {
+                            supabaseData[titular.ci].hijos.push(h);
+                        }
+                    });
+                });
+                console.log('Hijos organizados');
+                console.log('Total de CIs en Supabase:', Object.keys(supabaseData).length);
+                
+                updateProgress(100, 'Datos de Supabase cargados');
+                document.getElementById('supabaseCount').textContent = Object.keys(supabaseData).length;
+                compareBtn.disabled = false;
+                
+                showLoading(false);
+                alert(`Datos de Supabase cargados: ${Object.keys(supabaseData).length} titulares`);
+            } catch (error) {
+                showLoading(false);
+                alert('Error al cargar datos de Supabase: ' + error.message);
+            }
+        }
+        
+        function compareData() {
+            console.log('Iniciando comparación...');
+            console.log('Registros en CSV:', csvData.length);
+            console.log('CIs en Supabase:', Object.keys(supabaseData).length);
+            
+            comparisonResults = [];
+            let matchCount = 0;
+            let diffCount = 0;
+            let missingCount = 0;
+            
+            csvData.forEach(csvRow => {
+                const ci = csvRow['socio cedula_a'] || csvRow['socio cedula'];
+                const supabaseRow = supabaseData[ci];
+                
+                if (!supabaseRow) {
+                    // Faltante en Supabase
+                    missingCount++;
+                    comparisonResults.push({
+                        status: 'missing',
+                        ci: ci,
+                        csv: csvRow,
+                        supabase: null
+                    });
+                } else {
+                    // Comparar datos
+                    const nombreMatch = (csvRow['socio nombre_a'] || csvRow['socio nombre']) === supabaseRow.titular.nombre;
+                    const apellidoMatch = (csvRow['socio apellido_a'] || csvRow['socio apellido']) === supabaseRow.titular.apellido;
+                    
+                    // Comparar cónyuges (simplificado)
+                    const csvConyugeNombre = csvRow['conyugue c_nombre'] || '';
+                    const csvConyugeApellido = csvRow['conyugue c_apellido'] || '';
+                    const csvConyuges = csvConyugeNombre ? `${csvConyugeNombre} ${csvConyugeApellido}` : '';
+                    const supabaseConyuges = supabaseRow.conyuges.map(c => `${c.nombre} ${c.apellido}`).join(', ');
+                    const conyugesMatch = csvConyuges === supabaseConyuges;
+                    
+                    // Comparar adherentes/hijos (simplificado)
+                    const csvAdherenteNombre = csvRow['adherente nombre_b'] || '';
+                    const csvAdherenteApellido = csvRow['adherente apellido_b'] || '';
+                    const csvHijos = csvAdherenteNombre ? `${csvAdherenteNombre} ${csvAdherenteApellido}` : '';
+                    const supabaseHijos = supabaseRow.hijos.map(h => `${h.nombre} ${h.apellido}`).join(', ');
+                    const hijosMatch = csvHijos === supabaseHijos;
+                    
+                    if (nombreMatch && apellidoMatch && conyugesMatch && hijosMatch) {
+                        matchCount++;
+                        comparisonResults.push({
+                            status: 'match',
+                            ci: ci,
+                            csv: csvRow,
+                            supabase: supabaseRow
+                        });
+                    } else {
+                        diffCount++;
+                        comparisonResults.push({
+                            status: 'diff',
+                            ci: ci,
+                            csv: csvRow,
+                            supabase: supabaseRow,
+                            differences: {
+                                nombre: !nombreMatch,
+                                apellido: !apellidoMatch,
+                                conyuges: !conyugesMatch,
+                                hijos: !hijosMatch
+                            }
+                        });
+                    }
+                }
+            });
+            
+            console.log('Comparación completada:');
+            console.log('- Coincidentes:', matchCount);
+            console.log('- Con diferencias:', diffCount);
+            console.log('- Faltantes:', missingCount);
+            console.log('- Total resultados:', comparisonResults.length);
+            
+            // Actualizar estadísticas
+            document.getElementById('matchCount').textContent = matchCount;
+            document.getElementById('diffCount').textContent = diffCount;
+            document.getElementById('missingCount').textContent = missingCount;
+            
+            filteredResults = [...comparisonResults];
+            console.log('Llamando a renderTable con', filteredResults.length, 'resultados');
+            renderTable();
+            
+            // Actualizar texto del botón de insertar faltantes
+            const totalMissing = comparisonResults.filter(r => r.status === 'missing').length;
+            insertMissingBtn.textContent = `Insertar faltantes en Supabase (${totalMissing})`;
+            
+            saveChangesBtn.disabled = false;
+            exportCSVBtn.disabled = false;
+        }
+        
+        function parseConyugesCSV(row) {
+            // Adaptar según la estructura real del CSV
+            const conyugeCols = ['Cónyuge', 'Conyuge', 'CONYUGE', 'Nombre Conyuge'];
+            let conyuges = '';
+            conyugeCols.forEach(col => {
+                if (row[col]) conyuges = row[col];
+            });
+            return conyuges;
+        }
+        
+        function parseHijosCSV(row) {
+            // Adaptar según la estructura real del CSV
+            const hijosCols = ['Hijos', 'HIJOS', 'Nombre Hijos'];
+            let hijos = '';
+            hijosCols.forEach(col => {
+                if (row[col]) hijos = row[col];
+            });
+            return hijos;
+        }
+        
+        function renderTable() {
+            console.log('renderTable llamado con', filteredResults.length, 'resultados');
+            tableBody.innerHTML = '';
+            
+            // Limitar a primeros 100 resultados para rendimiento
+            const displayLimit = Math.min(filteredResults.length, 100);
+            console.log('Mostrando primeros', displayLimit, 'resultados');
+            
+            for (let i = 0; i < displayLimit; i++) {
+                const result = filteredResults[i];
+                const row = document.createElement('tr');
+                row.className = `${result.status}-row`;
+                
+                const statusBadge = document.createElement('span');
+                statusBadge.className = `status-badge status-${result.status}`;
+                statusBadge.textContent = result.status === 'match' ? 'Coincide' : 
+                                          result.status === 'diff' ? 'Diferencia' : 'Faltante';
+                
+                const csvNombre = result.csv['socio nombre_a'] || result.csv['socio nombre'] || '';
+                const csvApellido = result.csv['socio apellido_a'] || result.csv['socio apellido'] || '';
+                const csvConyugeNombre = result.csv['conyugue c_nombre'] || '';
+                const csvConyugeApellido = result.csv['conyugue c_apellido'] || '';
+                const csvAdherenteNombre = result.csv['adherente nombre_b'] || '';
+                const csvAdherenteApellido = result.csv['adherente apellido_b'] || '';
+                
+                const supabaseNombre = result.supabase ? result.supabase.titular.nombre : '';
+                const supabaseApellido = result.supabase ? result.supabase.titular.apellido : '';
+                
+                row.innerHTML = `
+                    <td></td>
+                    <td>${result.ci}</td>
+                    <td class="editable" contenteditable="true" data-field="csv-nombre" data-index="${i}">${csvNombre}</td>
+                    <td class="editable" contenteditable="true" data-field="csv-apellido" data-index="${i}">${csvApellido}</td>
+                    <td>${supabaseNombre}</td>
+                    <td>${supabaseApellido}</td>
+                    <td class="editable" contenteditable="true" data-field="csv-conyuge-nombre" data-index="${i}">${csvConyugeNombre}</td>
+                    <td>${result.supabase ? result.supabase.conyuges.map(c => `${c.nombre} ${c.apellido}`).join(', ') : ''}</td>
+                    <td class="editable" contenteditable="true" data-field="csv-adherente-nombre" data-index="${i}">${csvAdherenteNombre}</td>
+                    <td>${result.supabase ? result.supabase.hijos.map(h => `${h.nombre} ${h.apellido}`).join(', ') : ''}</td>
+                    <td>
+                        ${result.status === 'missing' ? '<button onclick="insertToSupabase(' + i + ')">Insertar</button>' : ''}
+                        ${result.status === 'diff' ? '<button onclick="updateSupabase(' + i + ')">Actualizar</button>' : ''}
+                    </td>
+                `;
+                
+                row.querySelector('td:first-child').appendChild(statusBadge);
+                tableBody.appendChild(row);
+            }
+            
+            if (filteredResults.length > 100) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="11" style="text-align: center; font-weight: bold;">... y ${filteredResults.length - 100} registros más (usa filtros para ver más)</td>`;
+                tableBody.appendChild(tr);
+            }
+            
+            console.log('Tabla renderizada con', tableBody.children.length, 'filas');
+            
+            // Agregar event listeners para campos editables
+            document.querySelectorAll('.editable').forEach(cell => {
+                cell.addEventListener('blur', handleEdit);
+            });
+        }
+        
+        function handleEdit(event) {
+            const field = event.target.dataset.field;
+            const index = event.target.dataset.index;
+            const value = event.target.textContent;
+            
+            if (field === 'csv-nombre') {
+                filteredResults[index].csv.Nombre = value;
+            } else if (field === 'csv-apellido') {
+                filteredResults[index].csv.Apellido = value;
+            } else if (field === 'csv-conyuges') {
+                filteredResults[index].csv['Cónyuge'] = value;
+            } else if (field === 'csv-hijos') {
+                filteredResults[index].csv.Hijos = value;
+            }
+        }
+        
+        function applyFilter() {
+            const status = filterStatus.value;
+            const ciSearch = searchCI.value.trim();
+            
+            filteredResults = comparisonResults.filter(result => {
+                const statusMatch = status === 'all' || result.status === status;
+                const ciMatch = !ciSearch || result.ci.includes(ciSearch);
+                return statusMatch && ciMatch;
+            });
+            
+            renderTable();
+        }
+        
+        async function insertToSupabase(index) {
+            const result = filteredResults[index];
+            if (!confirm(`¿Insertar titular ${result.ci} en Supabase?`)) return;
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('titulares')
+                    .insert({
+                        ci: result.ci,
+                        nombre: result.csv.Nombre || result.csv.nombre,
+                        apellido: result.csv.Apellido || result.csv.apellido,
+                        habilitado: true
+                    });
+                
+                if (error) throw error;
+                
+                alert('Titular insertado correctamente');
+                // Recargar datos y comparar nuevamente
+                await loadSupabaseData();
+                compareData();
+            } catch (error) {
+                alert('Error al insertar: ' + error.message);
+            }
+        }
+        
+        async function updateSupabase(index) {
+            const result = filteredResults[index];
+            if (!confirm(`¿Actualizar titular ${result.ci} en Supabase?`)) return;
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('titulares')
+                    .update({
+                        nombre: result.csv.Nombre || result.csv.nombre,
+                        apellido: result.csv.Apellido || result.csv.apellido
+                    })
+                    .eq('ci', result.ci);
+                
+                if (error) throw error;
+                
+                alert('Titular actualizado correctamente');
+                // Recargar datos y comparar nuevamente
+                await loadSupabaseData();
+                compareData();
+            } catch (error) {
+                alert('Error al actualizar: ' + error.message);
+            }
+        }
+        
+        async function insertMissingRecords() {
+            const missingRecords = comparisonResults.filter(r => r.status === 'missing');
+            
+            if (missingRecords.length === 0) {
+                alert('No hay registros faltantes para insertar');
+                return;
+            }
+            
+            // Deduplicar por CI (solo insertar una vez por titular)
+            const uniqueRecords = new Map();
+            missingRecords.forEach(record => {
+                if (!uniqueRecords.has(record.ci)) {
+                    uniqueRecords.set(record.ci, record);
+                }
+            });
+            
+            const deduplicatedRecords = Array.from(uniqueRecords.values());
+            
+            if (!confirm(`¿Insertar ${deduplicatedRecords.length} titulares únicos en Supabase? (De ${missingRecords.length} filas en CSV)\n\nEsta acción tomará varios minutos.`)) return;
+            
+            showLoading(true);
+            let successCount = 0;
+            let errorCount = 0;
+            const errorDetails = []; // Guardar detalles de errores
+            const batchSize = 50; // Insertar en lotes de 50 para evitar sobrecarga
+            
+            for (let i = 0; i < deduplicatedRecords.length; i += batchSize) {
+                const batch = deduplicatedRecords.slice(i, i + batchSize);
+                const progress = Math.round((i / deduplicatedRecords.length) * 100);
+                updateProgress(progress, `Insertando titulares ${i + 1}-${Math.min(i + batchSize, deduplicatedRecords.length)} de ${deduplicatedRecords.length}...`);
+                
+                for (const result of batch) {
+                    try {
+                        // Parsear fecha de nacimiento
+                        let fechaNac = result.csv['socio fecha_nac_'] || null;
+                        
+                        // Validar fecha - si es inválida como "-   -", enviar null
+                        if (fechaNac && (fechaNac.trim() === '-   -' || fechaNac.trim() === '' || !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fechaNac))) {
+                            fechaNac = null;
+                        }
+                        
+                        // Usar upsert (insertar si no existe, actualizar si existe)
+                        const { error } = await supabaseClient
+                            .from('titulares')
+                            .upsert({
+                                ci: result.ci,
+                                nombre: result.csv['socio nombre_a'] || result.csv['socio nombre'] || '',
+                                apellido: result.csv['socio apellido_a'] || result.csv['socio apellido'] || '',
+                                fecha_nacimiento: fechaNac,
+                                habilitado: true
+                            }, {
+                                onConflict: 'ci'
+                            });
+                        
+                        if (error) throw error;
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        errorDetails.push({ ci: result.ci, error: error.message });
+                        console.error(`Error insertando ${result.ci}:`, error);
+                    }
+                }
+                
+                // Pequeña pausa entre lotes para no sobrecargar
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            updateProgress(100, 'Inserción completada');
+            showLoading(false);
+            
+            // Mostrar reporte detallado en el área de texto
+            let report = `=== REPORTE DE INSERCIÓN ===\n\n`;
+            report += `Total titulares únicos: ${deduplicatedRecords.length}\n`;
+            report += `Exitosos: ${successCount}\n`;
+            report += `Errores: ${errorCount}\n\n`;
+            
+            if (errorCount > 0) {
+                report += `=== DETALLES DE ERRORES ===\n`;
+                errorDetails.slice(0, 20).forEach(err => {
+                    report += `❌ CI ${err.ci}: ${err.error}\n`;
+                });
+                if (errorDetails.length > 20) {
+                    report += `... y ${errorDetails.length - 20} errores más\n`;
+                }
+            }
+            
+            if (errorCount === 0) {
+                report += `✅ Todos los titulares insertados exitosamente.`;
+            }
+            
+            document.getElementById('validationReport').style.display = 'block';
+            document.getElementById('validationReportText').value = report;
+            
+            alert(`Inserción completada:\n${successCount} titulares insertados/actualizados\n${errorCount} errores\n\nVer detalles en el reporte de validación.`);
+            
+            // Recargar datos y comparar nuevamente
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function processConyuges() {
+            if (csvData.length === 0) {
+                alert('Por favor carga el CSV primero');
+                return;
+            }
+            
+            // Organizar cónyuges por CI de titular (deduplicar)
+            const conyugesMap = new Map();
+            
+            csvData.forEach(row => {
+                const ciTitular = row['socio cedula_a'] || row['socio cedula'] || '';
+                const conyugeNombre = row['conyugue c_nombre'] || '';
+                const conyugeApellido = row['conyugue c_apellido'] || '';
+                const conyugeCI = row['conyugue c_cedula'] || '';
+                
+                // Solo procesar si hay datos de cónyuge
+                if (conyugeNombre && conyugeApellido && ciTitular) {
+                    // Filtrar CIs inválidos (menos de 1000000 no son CIs reales de Paraguay)
+                    const validCI = conyugeCI && parseInt(conyugeCI) >= 1000000 ? conyugeCI : null;
+                    
+                    // Usar el CI del titular como clave para deduplicar
+                    if (!conyugesMap.has(ciTitular)) {
+                        conyugesMap.set(ciTitular, {
+                            titular_ci: ciTitular,
+                            nombre: conyugeNombre,
+                            apellido: conyugeApellido,
+                            ci: validCI
+                        });
+                    }
+                }
+            });
+            
+            const conyugesToInsert = Array.from(conyugesMap.values());
+            
+            if (conyugesToInsert.length === 0) {
+                alert('No se encontraron cónyuges en el CSV');
+                return;
+            }
+            
+            if (!confirm(`¿Procesar ${conyugesToInsert.length} cónyuges del CSV? Esta acción insertará cónyuges en Supabase.`)) return;
+            
+            showLoading(true);
+            let successCount = 0;
+            let errorCount = 0;
+            const errorDetails = [];
+            const batchSize = 50;
+            
+            for (let i = 0; i < conyugesToInsert.length; i += batchSize) {
+                const batch = conyugesToInsert.slice(i, i + batchSize);
+                const progress = Math.round((i / conyugesToInsert.length) * 100);
+                updateProgress(progress, `Procesando cónyuges ${i + 1}-${Math.min(i + batchSize, conyugesToInsert.length)} de ${conyugesToInsert.length}...`);
+                
+                for (const conyuge of batch) {
+                    try {
+                        // Buscar el ID del titular en Supabase
+                        const { data: titular } = await supabaseClient
+                            .from('titulares')
+                            .select('id')
+                            .eq('ci', conyuge.titular_ci)
+                            .single();
+                        
+                        if (!titular) {
+                            throw new Error(`Titular con CI ${conyuge.titular_ci} no encontrado en Supabase`);
+                        }
+                        
+                        // Verificar si ya existe un cónyuge para este titular
+                        const { data: existingConyuge } = await supabaseClient
+                            .from('conyuges')
+                            .select('id')
+                            .eq('titular_id', titular.id)
+                            .single();
+                        
+                        if (existingConyuge) {
+                            // Limpiar cónyuges duplicados para este titular
+                            await supabaseClient
+                                .from('conyuges')
+                                .delete()
+                                .eq('titular_id', titular.id)
+                                .neq('id', existingConyuge.id);
+                            
+                            // Actualizar cónyuge existente
+                            const { error } = await supabaseClient
+                                .from('conyuges')
+                                .update({
+                                    nombre: conyuge.nombre,
+                                    apellido: conyuge.apellido,
+                                    ci: conyuge.ci || null,
+                                    habilitado: true
+                                })
+                                .eq('id', existingConyuge.id);
+                            
+                            if (error) throw error;
+                        } else {
+                            // Limpiar cónyuges duplicados para este titular
+                            await supabaseClient
+                                .from('conyuges')
+                                .delete()
+                                .eq('titular_id', titular.id);
+                            
+                            // Verificar si el CI del cónyuge ya existe en otro titular
+                            if (conyuge.ci) {
+                                const { data: ciExists } = await supabaseClient
+                                    .from('conyuges')
+                                    .select('id')
+                                    .eq('ci', conyuge.ci)
+                                    .single();
+                                
+                                if (ciExists) {
+                                    // Usar el cónyuge existente con ese CI
+                                    console.log(`Usando cónyuge existente con CI ${conyuge.ci} para titular ${conyuge.titular_ci}`);
+                                    successCount++;
+                                    continue;
+                                }
+                            }
+                            
+                            // Insertar nuevo cónyuge
+                            const { error } = await supabaseClient
+                                .from('conyuges')
+                                .insert({
+                                    titular_id: titular.id,
+                                    nombre: conyuge.nombre,
+                                    apellido: conyuge.apellido,
+                                    ci: conyuge.ci || null,
+                                    habilitado: true
+                                });
+                            
+                            if (error) throw error;
+                        }
+                        
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        errorDetails.push({ titular_ci: conyuge.titular_ci, error: error.message });
+                        console.error(`Error procesando cónyuge de titular ${conyuge.titular_ci}:`, error);
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            updateProgress(100, 'Procesamiento completado');
+            showLoading(false);
+            
+            // Mostrar reporte
+            let report = `=== REPORTE DE PROCESAMIENTO DE CÓNYUGES ===\n\n`;
+            report += `Total cónyuges únicos: ${conyugesToInsert.length}\n`;
+            report += `Exitosos: ${successCount}\n`;
+            report += `Errores: ${errorCount}\n\n`;
+            
+            if (errorCount > 0) {
+                report += `=== DETALLES DE ERRORES ===\n`;
+                errorDetails.slice(0, 20).forEach(err => {
+                    report += `❌ Titular CI ${err.titular_ci}: ${err.error}\n`;
+                });
+                if (errorDetails.length > 20) {
+                    report += `... y ${errorDetails.length - 20} errores más\n`;
+                }
+            }
+            
+            if (errorCount === 0) {
+                report += `✅ Todos los cónyuges procesados exitosamente.`;
+            }
+            
+            document.getElementById('validationReport').style.display = 'block';
+            document.getElementById('validationReportText').value = report;
+            
+            alert(`Procesamiento completado:\n${successCount} cónyuges insertados/actualizados\n${errorCount} errores\n\nVer detalles en el reporte de validación.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function processHijos() {
+            if (csvData.length === 0) {
+                alert('Por favor carga el CSV primero');
+                return;
+            }
+            
+            // Mostrar columnas disponibles para debugging
+            console.log('Columnas disponibles en CSV:', Object.keys(csvData[0]));
+            console.log('Primer registro:', csvData[0]);
+            
+            // Cargar todos los hijos existentes de Supabase
+            showLoading(true);
+            updateProgress(10, 'Cargando hijos existentes de Supabase...');
+            
+            const existingHijos = new Set();
+            let from = 0;
+            const pageSize = 1000;
+            let hasMore = true;
+            
+            while (hasMore) {
+                const { data: hijosBatch, error } = await supabaseClient
+                    .from('hijos')
+                    .select('nombre,apellido,ci')
+                    .range(from, from + pageSize - 1);
+                
+                if (error) {
+                    console.error('Error cargando hijos:', error);
+                    hasMore = false;
+                    break;
+                }
+                
+                if (hijosBatch && hijosBatch.length > 0) {
+                    hijosBatch.forEach(h => {
+                        const key = `${h.nombre}_${h.apellido}_${h.ci || ''}_${h.fecha_nacimiento || ''}`;
+                        existingHijos.add(key);
+                    });
+                    from += pageSize;
+                    hasMore = hijosBatch.length === pageSize;
+                } else {
+                    hasMore = false;
+                }
+            }
+            
+            console.log(`Hijos existentes en Supabase: ${existingHijos.size}`);
+            
+            // Organizar hijos por clave única (nombre + apellido + CI) para deduplicar
+            const hijosMap = new Map();
+            
+            csvData.forEach(row => {
+                const ciTitular = row['socio cedula_a'] || row['socio cedula'] || '';
+                const hijoNombre = row['adherente nombre_b'] || '';
+                const hijoApellido = row['adherente  apellido_b'] || '';
+                const hijoCI = row['adherente  cedula_b'] || '';
+                const hijoFechaNac = row['adherente  fecha_nac2'] || '';
+                
+                // Solo procesar si hay datos de hijo
+                if (hijoNombre && hijoApellido && ciTitular) {
+                    // Filtrar CIs inválidos (menos de 1000000 no son CIs reales de Paraguay)
+                    const validCI = hijoCI && parseInt(hijoCI) >= 1000000 ? hijoCI : null;
+                    
+                    // Validar fecha de nacimiento
+                    let validFechaNac = hijoFechaNac;
+                    if (validFechaNac && (validFechaNac.trim() === '-   -' || validFechaNac.trim() === '' || !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(validFechaNac))) {
+                        validFechaNac = null;
+                    }
+                    
+                    // Crear clave única para deduplicación (nombre + apellido + CI + fecha_nacimiento)
+                    const hijoKey = `${hijoNombre}_${hijoApellido}_${validCI || ''}_${validFechaNac || ''}`;
+                    
+                    // Solo procesar si el hijo no existe en Supabase
+                    if (!existingHijos.has(hijoKey)) {
+                        if (!hijosMap.has(hijoKey)) {
+                            hijosMap.set(hijoKey, {
+                                nombre: hijoNombre,
+                                apellido: hijoApellido,
+                                ci: validCI,
+                                fecha_nacimiento: validFechaNac,
+                                titulares: [ciTitular]
+                            });
+                        } else {
+                            // Agregar titular a la lista si no está ya
+                            const hijo = hijosMap.get(hijoKey);
+                            if (!hijo.titulares.includes(ciTitular)) {
+                                hijo.titulares.push(ciTitular);
+                                // Log si el hijo aparece en múltiples titulares
+                                if (hijo.titulares.length > 1) {
+                                    console.log(`Hijo ${hijoNombre} ${hijoApellido} aparece en ${hijo.titulares.length} titulares:`, hijo.titulares);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            const hijosToInsert = Array.from(hijosMap.values());
+            
+            if (hijosToInsert.length === 0) {
+                alert('No se encontraron hijos nuevos para insertar (todos ya existen en Supabase)');
+                showLoading(false);
+                return;
+            }
+            
+            if (!confirm(`¿Procesar ${hijosToInsert.length} hijos nuevos del CSV con sus relaciones? Esta acción insertará solo los hijos que no existen en Supabase.`)) return;
+            
+            showLoading(true);
+            let successCount = 0;
+            let errorCount = 0;
+            const errorDetails = [];
+            const batchSize = 200;
+            
+            for (let i = 0; i < hijosToInsert.length; i += batchSize) {
+                const batch = hijosToInsert.slice(i, i + batchSize);
+                const progress = Math.round((i / hijosToInsert.length) * 100);
+                updateProgress(progress, `Procesando hijos ${i + 1}-${Math.min(i + batchSize, hijosToInsert.length)} de ${hijosToInsert.length}...`);
+                
+                for (const hijo of batch) {
+                    try {
+                        // Verificar si el hijo ya existe
+                        const { data: existingHijo } = await supabaseClient
+                            .from('hijos')
+                            .select('id')
+                            .eq('nombre', hijo.nombre)
+                            .eq('apellido', hijo.apellido)
+                            .eq('ci', hijo.ci)
+                            .single();
+                        
+                        let hijoId;
+                        
+                        if (existingHijo) {
+                            hijoId = existingHijo.id;
+                        } else {
+                            // Verificar si el CI del hijo ya existe en otro registro
+                            if (hijo.ci) {
+                                const { data: ciExists } = await supabaseClient
+                                    .from('hijos')
+                                    .select('id')
+                                    .eq('ci', hijo.ci)
+                                    .single();
+                                
+                                if (ciExists) {
+                                    // Usar el hijo existente con ese CI
+                                    console.log(`Usando hijo existente con CI ${hijo.ci} para ${hijo.nombre} ${hijo.apellido}`);
+                                    hijoId = ciExists.id;
+                                } else {
+                                    // Insertar nuevo hijo
+                                    const { data: newHijo, error: insertError } = await supabaseClient
+                                        .from('hijos')
+                                        .insert({
+                                            nombre: hijo.nombre,
+                                            apellido: hijo.apellido,
+                                            ci: hijo.ci || null,
+                                            fecha_nacimiento: hijo.fecha_nacimiento || null,
+                                            habilitado: true
+                                        })
+                                        .select('id')
+                                        .single();
+                                    
+                                    if (insertError) throw insertError;
+                                    hijoId = newHijo.id;
+                                }
+                            } else {
+                                // Insertar nuevo hijo sin CI
+                                const { data: newHijo, error: insertError } = await supabaseClient
+                                    .from('hijos')
+                                    .insert({
+                                        nombre: hijo.nombre,
+                                        apellido: hijo.apellido,
+                                        ci: hijo.ci || null,
+                                        fecha_nacimiento: hijo.fecha_nacimiento || null,
+                                        habilitado: true
+                                    })
+                                    .select('id')
+                                    .single();
+                                
+                                if (insertError) throw insertError;
+                                hijoId = newHijo.id;
+                            }
+                        }
+                        
+                        // Crear relaciones con todos los titulares en batch
+                        const relationsToInsert = [];
+                        for (const ciTitular of hijo.titulares) {
+                            const { data: titular } = await supabaseClient
+                                .from('titulares')
+                                .select('id')
+                                .eq('ci', ciTitular)
+                                .single();
+                            
+                            if (!titular) {
+                                console.warn(`Titular con CI ${ciTitular} no encontrado, saltando relación`);
+                                continue;
+                            }
+                            
+                            relationsToInsert.push({
+                                hijo_id: hijoId,
+                                titular_id: titular.id
+                            });
+                        }
+                        
+                        // Limpiar relaciones duplicadas en batch
+                        if (relationsToInsert.length > 0) {
+                            for (const relation of relationsToInsert) {
+                                await supabaseClient
+                                    .from('hijo_titular')
+                                    .delete()
+                                    .eq('hijo_id', relation.hijo_id)
+                                    .eq('titular_id', relation.titular_id);
+                            }
+                            
+                            // Insertar todas las relaciones en batch
+                            const { error: relationError } = await supabaseClient
+                                .from('hijo_titular')
+                                .insert(relationsToInsert);
+                            
+                            if (relationError) throw relationError;
+                        }
+                        
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        errorDetails.push({ hijo: `${hijo.nombre} ${hijo.apellido}`, error: error.message });
+                        console.error(`Error procesando hijo ${hijo.nombre} ${hijo.apellido}:`, error);
+                    }
+                }
+                
+                // Eliminado delay para acelerar
+            }
+            
+            updateProgress(100, 'Procesamiento completado');
+            showLoading(false);
+            
+            // Mostrar reporte
+            let report = `=== REPORTE DE PROCESAMIENTO DE HIJOS ===\n\n`;
+            report += `Total hijos únicos: ${hijosToInsert.length}\n`;
+            report += `Exitosos: ${successCount}\n`;
+            report += `Errores: ${errorCount}\n\n`;
+            
+            if (errorCount > 0) {
+                report += `=== DETALLES DE ERRORES ===\n`;
+                errorDetails.slice(0, 20).forEach(err => {
+                    report += `❌ ${err.hijo}: ${err.error}\n`;
+                });
+                if (errorDetails.length > 20) {
+                    report += `... y ${errorDetails.length - 20} errores más\n`;
+                }
+            }
+            
+            if (errorCount === 0) {
+                report += `✅ Todos los hijos procesados exitosamente.`;
+            }
+            
+            document.getElementById('validationReport').style.display = 'block';
+            document.getElementById('validationReportText').value = report;
+            
+            alert(`Procesamiento completado:\n${successCount} hijos procesados\n${errorCount} errores\n\nVer detalles en el reporte de validación.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarConyugesDuplicados() {
+            if (!confirm('¿Limpiar cónyuges que también son titulares? Esta acción eliminará los cónyuges que también existen como titulares (socios ambos).')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Buscando cónyuges que también son titulares...');
+            
+            // Buscar cónyuges que también son titulares
+            const { data: conyugesTitulares, error: error1 } = await supabaseClient
+                .from('conyuges')
+                .select('id, titular_id, nombre, apellido, ci, fecha_nacimiento')
+                .not('ci', 'is', null);
+            
+            if (error1) {
+                console.error('Error buscando cónyuges:', error1);
+                showLoading(false);
+                alert('Error buscando cónyuges');
+                return;
+            }
+            
+            updateProgress(30, 'Identificando cónyuges que son titulares...');
+            
+            // Buscar titulares con los mismos CIs
+            const cis = conyugesTitulares.map(c => c.ci).filter(ci => ci);
+            const { data: titularesMismoCI, error: error2 } = await supabaseClient
+                .from('titulares')
+                .select('ci, nombre, apellido, fecha_nacimiento')
+                .in('ci', cis);
+            
+            if (error2) {
+                console.error('Error buscando titulares:', error2);
+                showLoading(false);
+                alert('Error buscando titulares');
+                return;
+            }
+            
+            const titularCIs = new Set(titularesMismoCI.map(t => t.ci));
+            const conyugesAEliminar = conyugesTitulares.filter(c => titularCIs.has(c.ci));
+            
+            console.log(`Cónyuges que también son titulares: ${conyugesAEliminar.length}`);
+            
+            updateProgress(50, 'Eliminando cónyuges que son titulares...');
+            
+            let eliminados = 0;
+            let errores = 0;
+            
+            // Eliminar todos los cónyuges que también son titulares
+            for (const c of conyugesAEliminar) {
+                const { error } = await supabaseClient
+                    .from('conyuges')
+                    .delete()
+                    .eq('id', c.id);
+                
+                if (!error) {
+                    eliminados++;
+                    console.log(`Eliminado cónyuge que es titular: ${c.nombre} ${c.apellido} (CI: ${c.ci})`);
+                } else {
+                    errores++;
+                    console.error(`Error eliminando cónyuge ${c.nombre} ${c.apellido}:`, error);
+                }
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n${eliminados} cónyuges eliminados (que también son titulares)\n${errores} errores\n\nVer detalles en la consola.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarRelacionesHijoTitular() {
+            if (!confirm('¿Limpiar relaciones hijo_titular duplicadas? Esta acción eliminará relaciones duplicadas entre hijos y titulares.')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Buscando relaciones hijo_titular duplicadas...');
+            
+            // Buscar todas las relaciones
+            const { data: relaciones, error: error1 } = await supabaseClient
+                .from('hijo_titular')
+                .select('id, hijo_id, titular_id');
+            
+            if (error1) {
+                console.error('Error buscando relaciones:', error1);
+                showLoading(false);
+                alert('Error buscando relaciones');
+                return;
+            }
+            
+            updateProgress(30, 'Identificando duplicados...');
+            
+            // Agrupar por hijo_id y titular_id para encontrar duplicados
+            const claveRelacion = new Map();
+            const duplicados = [];
+            
+            for (const rel of relaciones) {
+                const clave = `${rel.hijo_id}-${rel.titular_id}`;
+                if (claveRelacion.has(clave)) {
+                    duplicados.push(rel);
+                } else {
+                    claveRelacion.set(clave, rel);
+                }
+            }
+            
+            console.log(`Relaciones duplicadas encontradas: ${duplicados.length}`);
+            
+            updateProgress(50, 'Eliminando relaciones duplicadas...');
+            
+            let eliminadas = 0;
+            let errores = 0;
+            
+            // Eliminar las relaciones duplicadas
+            for (const rel of duplicados) {
+                const { error } = await supabaseClient
+                    .from('hijo_titular')
+                    .delete()
+                    .eq('id', rel.id);
+                
+                if (!error) {
+                    eliminadas++;
+                    console.log(`Eliminada relación duplicada: hijo_id=${rel.hijo_id}, titular_id=${rel.titular_id}`);
+                } else {
+                    errores++;
+                    console.error(`Error eliminando relación hijo_id=${rel.hijo_id}, titular_id=${rel.titular_id}:`, error);
+                }
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n${eliminadas} relaciones duplicadas eliminadas\n${errores} errores\n\nVer detalles en la consola.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarHijosDuplicados() {
+            if (!confirm('¿Limpiar hijos duplicados? Esta acción reasignará las relaciones de los hijos duplicados al hijo principal y eliminará los duplicados.')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Buscando hijos duplicados...');
+            
+            // Buscar todos los hijos
+            const { data: hijos, error: error1 } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido, ci, fecha_nacimiento');
+            
+            if (error1) {
+                console.error('Error buscando hijos:', error1);
+                showLoading(false);
+                alert('Error buscando hijos');
+                return;
+            }
+            
+            updateProgress(30, 'Identificando duplicados...');
+            
+            // Función para normalizar datos
+            const normalizar = (texto) => {
+                if (!texto) return '';
+                return texto.toString().toUpperCase().trim().replace(/\s+/g, ' ');
+            };
+            
+            // Agrupar por nombre + apellido + CI + fecha_nacimiento (normalizados)
+            const gruposHijos = new Map();
+            
+            for (const hijo of hijos) {
+                const nombreNorm = normalizar(hijo.nombre);
+                const apellidoNorm = normalizar(hijo.apellido);
+                const ciNorm = hijo.ci ? normalizar(hijo.ci) : 'NULL';
+                const fechaNorm = hijo.fecha_nacimiento || 'NULL';
+                
+                const clave = `${nombreNorm}-${apellidoNorm}-${ciNorm}-${fechaNorm}`;
+                
+                console.log(`Hijo ID ${hijo.id}: ${hijo.nombre} ${hijo.apellido} -> Clave: ${clave}`);
+                
+                if (!gruposHijos.has(clave)) {
+                    gruposHijos.set(clave, []);
+                }
+                gruposHijos.get(clave).push(hijo);
+            }
+            
+            // Identificar grupos con duplicados y mantener el ID más bajo
+            const duplicadosAEliminar = [];
+            const reasignaciones = [];
+            
+            gruposHijos.forEach((grupo, clave) => {
+                if (grupo.length > 1) {
+                    // Ordenar por ID y mantener el más bajo
+                    grupo.sort((a, b) => a.id - b.id);
+                    const hijoPrincipal = grupo[0];
+                    const duplicados = grupo.slice(1);
+                    
+                    duplicados.forEach(duplicado => {
+                        duplicadosAEliminar.push(duplicado);
+                        reasignaciones.push({
+                            de: duplicado.id,
+                            a: hijoPrincipal.id,
+                            nombre: duplicado.nombre,
+                            apellido: duplicado.apellido
+                        });
+                    });
+                }
+            });
+            
+            console.log(`Hijos duplicados encontrados: ${duplicadosAEliminar.length}`);
+            console.log(`Reasignaciones a realizar: ${reasignaciones.length}`);
+            
+            updateProgress(50, 'Reasignando relaciones...');
+            
+            let reasignadas = 0;
+            let erroresReasignacion = 0;
+            
+            // Reasignar las relaciones de los duplicados al hijo principal
+            for (const reasignacion of reasignaciones) {
+                const { error } = await supabaseClient
+                    .from('hijo_titular')
+                    .update({ hijo_id: reasignacion.a })
+                    .eq('hijo_id', reasignacion.de);
+                
+                if (!error) {
+                    reasignadas++;
+                    console.log(`Reasignadas relaciones de hijo ${reasignacion.de} a hijo ${reasignacion.a} (${reasignacion.nombre} ${reasignacion.apellido})`);
+                } else {
+                    erroresReasignacion++;
+                    console.error(`Error reasignando relaciones de hijo ${reasignacion.de}:`, error);
+                }
+            }
+            
+            updateProgress(70, 'Eliminando hijos duplicados...');
+            
+            let eliminados = 0;
+            let erroresEliminacion = 0;
+            
+            // Eliminar los hijos duplicados
+            for (const hijo of duplicadosAEliminar) {
+                const { error } = await supabaseClient
+                    .from('hijos')
+                    .delete()
+                    .eq('id', hijo.id);
+                
+                if (!error) {
+                    eliminados++;
+                    console.log(`Eliminado hijo duplicado: ${hijo.nombre} ${hijo.apellido} (ID: ${hijo.id})`);
+                } else {
+                    erroresEliminacion++;
+                    console.error(`Error eliminando hijo ${hijo.nombre} ${hijo.apellido}:`, error);
+                }
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n${reasignadas} relaciones reasignadas\n${eliminados} hijos duplicados eliminados\n${erroresReasignacion} errores en reasignación\n${erroresEliminacion} errores en eliminación\n\nVer detalles en la consola.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarHijosDuplicadosTitular() {
+            const ci = prompt('Ingrese el CI del titular para limpiar hijos duplicados (ej: 1685843):');
+            if (!ci) return;
+            
+            if (!confirm('¿Limpiar hijos duplicados de este titular? Esta acción reasignará las relaciones de los hijos duplicados al hijo principal y eliminará los duplicados.')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Buscando titular...');
+            
+            // Buscar el titular
+            const { data: titular, error: errorTitular } = await supabaseClient
+                .from('titulares')
+                .select('id, ci, nombre, apellido')
+                .eq('ci', ci)
+                .single();
+            
+            if (errorTitular || !titular) {
+                console.error('Error buscando titular:', errorTitular);
+                showLoading(false);
+                alert('Titular no encontrado');
+                return;
+            }
+            
+            updateProgress(30, 'Buscando relaciones hijo_titular...');
+            
+            // Buscar todas las relaciones hijo_titular para este titular
+            const { data: relaciones, error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('hijo_id, titular_id')
+                .eq('titular_id', titular.id);
+            
+            if (errorRelaciones) {
+                console.error('Error buscando relaciones:', errorRelaciones);
+                showLoading(false);
+                alert('Error buscando relaciones');
+                return;
+            }
+            
+            updateProgress(50, 'Buscando detalles de hijos...');
+            
+            // Buscar los detalles de los hijos
+            const hijoIds = relaciones.map(r => r.hijo_id);
+            const { data: hijos, error: errorHijos } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido, ci, fecha_nacimiento')
+                .in('id', hijoIds);
+            
+            if (errorHijos) {
+                console.error('Error buscando hijos:', errorHijos);
+                showLoading(false);
+                alert('Error buscando hijos');
+                return;
+            }
+            
+            updateProgress(70, 'Identificando duplicados...');
+            
+            // Función para normalizar datos
+            const normalizar = (texto) => {
+                if (!texto) return '';
+                return texto.toString().toUpperCase().trim().replace(/\s+/g, ' ');
+            };
+            
+            // Agrupar por nombre + apellido + CI + fecha_nacimiento (normalizados)
+            const gruposHijos = new Map();
+            
+            for (const hijo of hijos) {
+                const nombreNorm = normalizar(hijo.nombre);
+                const apellidoNorm = normalizar(hijo.apellido);
+                const ciNorm = hijo.ci ? normalizar(hijo.ci) : 'NULL';
+                const fechaNorm = hijo.fecha_nacimiento || 'NULL';
+                
+                const clave = `${nombreNorm}-${apellidoNorm}-${ciNorm}-${fechaNorm}`;
+                
+                console.log(`Hijo ID ${hijo.id}: ${hijo.nombre} ${hijo.apellido} -> Clave: ${clave}`);
+                
+                if (!gruposHijos.has(clave)) {
+                    gruposHijos.set(clave, []);
+                }
+                gruposHijos.get(clave).push(hijo);
+            }
+            
+            // Identificar grupos con duplicados y mantener el ID más bajo
+            const duplicadosAEliminar = [];
+            const reasignaciones = [];
+            
+            gruposHijos.forEach((grupo, clave) => {
+                if (grupo.length > 1) {
+                    // Ordenar por ID y mantener el más bajo
+                    grupo.sort((a, b) => a.id - b.id);
+                    const hijoPrincipal = grupo[0];
+                    const duplicados = grupo.slice(1);
+                    
+                    duplicados.forEach(duplicado => {
+                        duplicadosAEliminar.push(duplicado);
+                        reasignaciones.push({
+                            de: duplicado.id,
+                            a: hijoPrincipal.id,
+                            nombre: duplicado.nombre,
+                            apellido: duplicado.apellido
+                        });
+                    });
+                }
+            });
+            
+            console.log(`Hijos duplicados encontrados: ${duplicadosAEliminar.length}`);
+            console.log(`Reasignaciones a realizar: ${reasignaciones.length}`);
+            
+            if (duplicadosAEliminar.length === 0) {
+                updateProgress(100, 'No hay duplicados');
+                showLoading(false);
+                alert('No se encontraron hijos duplicados para este titular');
+                return;
+            }
+            
+            updateProgress(80, 'Reasignando relaciones...');
+            
+            let reasignadas = 0;
+            let erroresReasignacion = 0;
+            
+            // Reasignar las relaciones de los duplicados al hijo principal
+            for (const reasignacion of reasignaciones) {
+                const { error } = await supabaseClient
+                    .from('hijo_titular')
+                    .update({ hijo_id: reasignacion.a })
+                    .eq('hijo_id', reasignacion.de)
+                    .eq('titular_id', titular.id);
+                
+                if (!error) {
+                    reasignadas++;
+                    console.log(`Reasignadas relaciones de hijo ${reasignacion.de} a hijo ${reasignacion.a} (${reasignacion.nombre} ${reasignacion.apellido})`);
+                } else {
+                    erroresReasignacion++;
+                    console.error(`Error reasignando relaciones de hijo ${reasignacion.de}:`, error);
+                }
+            }
+            
+            updateProgress(90, 'Eliminando hijos duplicados...');
+            
+            let eliminados = 0;
+            let erroresEliminacion = 0;
+            
+            // Eliminar los hijos duplicados
+            for (const hijo of duplicadosAEliminar) {
+                const { error } = await supabaseClient
+                    .from('hijos')
+                    .delete()
+                    .eq('id', hijo.id);
+                
+                if (!error) {
+                    eliminados++;
+                    console.log(`Eliminado hijo duplicado: ${hijo.nombre} ${hijo.apellido} (ID: ${hijo.id})`);
+                } else {
+                    erroresEliminacion++;
+                    console.error(`Error eliminando hijo ${hijo.nombre} ${hijo.apellido}:`, error);
+                }
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n${reasignadas} relaciones reasignadas\n${eliminados} hijos duplicados eliminados\n${erroresReasignacion} errores en reasignación\n${erroresEliminacion} errores en eliminación\n\nVer detalles en la consola.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarHijosDuplicadosTodos() {
+            if (!confirm('¿Limpiar hijos duplicados de TODOS los titulares? Esta acción procesará todos los titulares y limpiará los hijos duplicados de cada uno. Puede tomar varios minutos.')) return;
+            
+            showLoading(true);
+            updateProgress(5, 'Buscando todos los titulares...');
+            
+            // Buscar todos los titulares
+            const { data: titulares, error: errorTitulares } = await supabaseClient
+                .from('titulares')
+                .select('id, ci, nombre, apellido');
+            
+            if (errorTitulares) {
+                console.error('Error buscando titulares:', errorTitulares);
+                showLoading(false);
+                alert('Error buscando titulares');
+                return;
+            }
+            
+            console.log(`Procesando ${titulares.length} titulares...`);
+            
+            // Función para normalizar datos
+            const normalizar = (texto) => {
+                if (!texto) return '';
+                return texto.toString().toUpperCase().trim().replace(/\s+/g, ' ');
+            };
+            
+            let totalReasignadas = 0;
+            let totalEliminados = 0;
+            let totalErrores = 0;
+            let titularesProcesados = 0;
+            let titularesConDuplicados = 0;
+            
+            for (let i = 0; i < titulares.length; i++) {
+                const titular = titulares[i];
+                const progreso = Math.round(5 + (i / titulares.length) * 90);
+                updateProgress(progreso, `Procesando titular ${i + 1} de ${titulares.length}: ${titular.nombre} ${titular.apellido}`);
+                
+                try {
+                    // Buscar relaciones hijo_titular para este titular
+                    const { data: relaciones, error: errorRelaciones } = await supabaseClient
+                        .from('hijo_titular')
+                        .select('hijo_id, titular_id')
+                        .eq('titular_id', titular.id);
+                    
+                    if (errorRelaciones || !relaciones || relaciones.length === 0) {
+                        continue; // Saltar titulares sin hijos
+                    }
+                    
+                    // Buscar detalles de los hijos
+                    const hijoIds = relaciones.map(r => r.hijo_id);
+                    const { data: hijos, error: errorHijos } = await supabaseClient
+                        .from('hijos')
+                        .select('id, nombre, apellido, ci, fecha_nacimiento')
+                        .in('id', hijoIds);
+                    
+                    if (errorHijos || !hijos) {
+                        continue;
+                    }
+                    
+                    // Agrupar por nombre + apellido + CI + fecha_nacimiento (normalizados)
+                    const gruposHijos = new Map();
+                    
+                    for (const hijo of hijos) {
+                        const nombreNorm = normalizar(hijo.nombre);
+                        const apellidoNorm = normalizar(hijo.apellido);
+                        const ciNorm = hijo.ci ? normalizar(hijo.ci) : 'NULL';
+                        const fechaNorm = hijo.fecha_nacimiento || 'NULL';
+                        
+                        const clave = `${nombreNorm}-${apellidoNorm}-${ciNorm}-${fechaNorm}`;
+                        
+                        if (!gruposHijos.has(clave)) {
+                            gruposHijos.set(clave, []);
+                        }
+                        gruposHijos.get(clave).push(hijo);
+                    }
+                    
+                    // Identificar duplicados
+                    const duplicadosAEliminar = [];
+                    const reasignaciones = [];
+                    
+                    gruposHijos.forEach((grupo, clave) => {
+                        if (grupo.length > 1) {
+                            grupo.sort((a, b) => a.id - b.id);
+                            const hijoPrincipal = grupo[0];
+                            const duplicados = grupo.slice(1);
+                            
+                            duplicados.forEach(duplicado => {
+                                duplicadosAEliminar.push(duplicado);
+                                reasignaciones.push({
+                                    de: duplicado.id,
+                                    a: hijoPrincipal.id,
+                                    nombre: duplicado.nombre,
+                                    apellido: duplicado.apellido
+                                });
+                            });
+                        }
+                    });
+                    
+                    if (duplicadosAEliminar.length > 0) {
+                        titularesConDuplicados++;
+                        console.log(`Titular ${titular.ci} (${titular.nombre} ${titular.apellido}): ${duplicadosAEliminar.length} duplicados encontrados`);
+                        
+                        // Reasignar relaciones
+                        for (const reasignacion of reasignaciones) {
+                            const { error } = await supabaseClient
+                                .from('hijo_titular')
+                                .update({ hijo_id: reasignacion.a })
+                                .eq('hijo_id', reasignacion.de)
+                                .eq('titular_id', titular.id);
+                            
+                            if (!error) {
+                                totalReasignadas++;
+                            } else {
+                                totalErrores++;
+                            }
+                        }
+                        
+                        // Eliminar duplicados
+                        for (const hijo of duplicadosAEliminar) {
+                            const { error } = await supabaseClient
+                                .from('hijos')
+                                .delete()
+                                .eq('id', hijo.id);
+                            
+                            if (!error) {
+                                totalEliminados++;
+                            } else {
+                                totalErrores++;
+                            }
+                        }
+                    }
+                    
+                    titularesProcesados++;
+                    
+                } catch (error) {
+                    console.error(`Error procesando titular ${titular.ci}:`, error);
+                    totalErrores++;
+                }
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n${titularesProcesados} titulares procesados\n${titularesConDuplicados} titulares con duplicados\n${totalReasignadas} relaciones reasignadas\n${totalEliminados} hijos duplicados eliminados\n${totalErrores} errores\n\nVer detalles en la consola.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function verificarEstadoBD() {
+            showLoading(true);
+            updateProgress(10, 'Contando registros...');
+            
+            // Contar titulares
+            const { count: countTitulares, error: errorTitulares } = await supabaseClient
+                .from('titulares')
+                .select('*', { count: 'exact', head: true });
+            
+            // Contar cónyuges
+            const { count: countConyuges, error: errorConyuges } = await supabaseClient
+                .from('conyuges')
+                .select('*', { count: 'exact', head: true });
+            
+            // Contar hijos
+            const { count: countHijos, error: errorHijos } = await supabaseClient
+                .from('hijos')
+                .select('*', { count: 'exact', head: true });
+            
+            // Contar relaciones hijo_titular
+            const { count: countRelaciones, error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('*', { count: 'exact', head: true });
+            
+            updateProgress(100, 'Verificación completada');
+            showLoading(false);
+            
+            let reporte = `=== ESTADO ACTUAL DE LA BASE DE DATOS ===\n\n`;
+            reporte += `Titulares: ${countTitulares || 0}\n`;
+            reporte += `Cónyuges: ${countConyuges || 0}\n`;
+            reporte += `Hijos: ${countHijos || 0}\n`;
+            reporte += `Relaciones hijo_titular: ${countRelaciones || 0}\n`;
+            
+            console.log(reporte);
+            
+            // Mostrar en área de texto copiable
+            const reporteDiv = document.getElementById('diagnosticoReport');
+            const reporteText = document.getElementById('diagnosticoReportText');
+            reporteText.value = reporte;
+            reporteDiv.style.display = 'block';
+            
+            alert(`Estado actual:\n${countTitulares} titulares\n${countConyuges} cónyuges\n${countHijos} hijos\n${countRelaciones} relaciones hijo_titular\n\nVer detalles en el reporte.`);
+        }
+        
+        async function investigarHijosMultiplesTitulares() {
+            showLoading(true);
+            updateProgress(10, 'Buscando relaciones hijo_titular...');
+            
+            // Buscar todas las relaciones hijo_titular
+            const { data: relaciones, error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('hijo_id, titular_id');
+            
+            if (errorRelaciones) {
+                console.error('Error buscando relaciones:', errorRelaciones);
+                showLoading(false);
+                alert('Error buscando relaciones');
+                return;
+            }
+            
+            updateProgress(30, 'Contando relaciones por hijo...');
+            
+            // Contar cuántos titulares tiene cada hijo
+            const hijosPorTitular = new Map();
+            
+            for (const rel of relaciones) {
+                if (hijosPorTitular.has(rel.hijo_id)) {
+                    hijosPorTitular.set(rel.hijo_id, hijosPorTitular.get(rel.hijo_id) + 1);
+                } else {
+                    hijosPorTitular.set(rel.hijo_id, 1);
+                }
+            }
+            
+            // Filtrar hijos con más de X titulares (por ejemplo, más de 5)
+            const limite = 5;
+            const hijosConMuchosTitulares = [];
+            
+            hijosPorTitular.forEach((count, hijoId) => {
+                if (count > limite) {
+                    hijosConMuchosTitulares.push({ hijoId, count });
+                }
+            });
+            
+            // Ordenar por cantidad de titulares (descendente)
+            hijosConMuchosTitulares.sort((a, b) => b.count - a.count);
+            
+            console.log(`Hijos con más de ${limite} titulares: ${hijosConMuchosTitulares.length}`);
+            
+            updateProgress(50, 'Buscando detalles de hijos...');
+            
+            // Buscar detalles de los hijos con muchos titulares
+            const hijoIds = hijosConMuchosTitulares.map(h => h.hijoId);
+            const { data: hijos, error: errorHijos } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido, ci, fecha_nacimiento')
+                .in('id', hijoIds);
+            
+            if (errorHijos) {
+                console.error('Error buscando hijos:', errorHijos);
+                showLoading(false);
+                alert('Error buscando hijos');
+                return;
+            }
+            
+            updateProgress(70, 'Buscando detalles de titulares...');
+            
+            // Buscar los titulares para cada hijo
+            let reporte = `=== HIJOS CON MÁS DE ${limite} TITULARES ===\n`;
+            reporte += `Total encontrados: ${hijosConMuchosTitulares.length}\n\n`;
+            
+            for (const item of hijosConMuchosTitulares) {
+                const hijo = hijos.find(h => h.id === item.hijoId);
+                if (!hijo) continue;
+                
+                reporte += `HIJO: ${hijo.nombre} ${hijo.apellido} (ID: ${hijo.id}, CI: ${hijo.ci || 'N/A'}, Fecha: ${hijo.fecha_nacimiento || 'N/A'})\n`;
+                reporte += `Titulares: ${item.count}\n`;
+                
+                // Buscar los titulares específicos de este hijo
+                const relacionesHijo = relaciones.filter(r => r.hijo_id === item.hijoId);
+                const titularIds = relacionesHijo.map(r => r.titular_id);
+                
+                const { data: titulares, error: errorTitulares } = await supabaseClient
+                    .from('titulares')
+                    .select('id, ci, nombre, apellido')
+                    .in('id', titularIds);
+                
+                if (!errorTitulares && titulares) {
+                    reporte += `Titulares asociados:\n`;
+                    titulares.forEach(t => {
+                        reporte += `  - ${t.nombre} ${t.apellido} (CI: ${t.ci})\n`;
+                    });
+                }
+                
+                reporte += `\n`;
+            }
+            
+            updateProgress(100, 'Investigación completada');
+            showLoading(false);
+            
+            console.log(reporte);
+            
+            // Mostrar en área de texto copiable
+            const reporteDiv = document.getElementById('diagnosticoReport');
+            const reporteText = document.getElementById('diagnosticoReportText');
+            reporteText.value = reporte;
+            reporteDiv.style.display = 'block';
+            
+            alert(`Investigación completada:\n${hijosConMuchosTitulares.length} hijos con más de ${limite} titulares\n\nVer detalles en el reporte.`);
+        }
+        
+        async function eliminarHijoHugoEstigarribia() {
+            if (!confirm('¿Eliminar el hijo HUGO AMILCAR ESTIGARRIBIA CABALLERO (ID: 5057) y sus 961 relaciones? Esta acción eliminará el registro del hijo y todas sus relaciones con titulares.')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Eliminando relaciones hijo_titular...');
+            
+            // Primero eliminar todas las relaciones hijo_titular para este hijo
+            const { error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .delete()
+                .eq('hijo_id', 5057);
+            
+            if (errorRelaciones) {
+                console.error('Error eliminando relaciones:', errorRelaciones);
+                showLoading(false);
+                alert('Error eliminando relaciones');
+                return;
+            }
+            
+            updateProgress(50, 'Eliminando registro del hijo...');
+            
+            // Luego eliminar el registro del hijo
+            const { error: errorHijo } = await supabaseClient
+                .from('hijos')
+                .delete()
+                .eq('id', 5057);
+            
+            if (errorHijo) {
+                console.error('Error eliminando hijo:', errorHijo);
+                showLoading(false);
+                alert('Error eliminando hijo');
+                return;
+            }
+            
+            updateProgress(100, 'Eliminación completada');
+            showLoading(false);
+            
+            alert('Eliminación completada:\n- 961 relaciones hijo_titular eliminadas\n- 1 registro de hijo eliminado (HUGO AMILCAR ESTIGARRIBIA CABALLERO)');
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        function generarCSVHijos() {
+            if (!csvData || csvData.length === 0) {
+                alert('Primero carga el CSV original');
+                return;
+            }
+            
+            showLoading(true);
+            updateProgress(10, 'Procesando datos de hijos...');
+            
+            // Columnas originales del CSV (columnas 13-17)
+            const headers = [
+                'adherente',           // Columna 13
+                'cedula_b',            // Columna 14
+                'adherente nombre_b',  // Columna 15
+                'adherente  apellido_b', // Columna 16
+                'adherente  fecha_nac2', // Columna 17
+                'adherente  ano2',     // Columna 18
+                'socio cedula_a'       // Para referencia del titular
+            ];
+            
+            const csvRows = [headers.join(',')];
+            
+            csvData.forEach(row => {
+                const adherente = row['adherente'] || '';
+                const cedula_b = row['adherente  cedula_b'] || '';
+                const nombre_b = row['adherente nombre_b'] || '';
+                const apellido_b = row['adherente  apellido_b'] || '';
+                const fecha_nac2 = row['adherente  fecha_nac2'] || '';
+                const ano2 = row['adherente  ano2'] || '';
+                const socio_cedula = row['socio cedula_a'] || row['socio cedula'] || '';
+                
+                // Solo incluir si hay datos de hijo (nombre y apellido son obligatorios)
+                if (nombre_b && apellido_b) {
+                    const row = [
+                        `"${adherente}"`,
+                        `"${cedula_b}"`,
+                        `"${nombre_b}"`,
+                        `"${apellido_b}"`,
+                        `"${fecha_nac2}"`,
+                        `"${ano2}"`,
+                        `"${socio_cedula}"`
+                    ];
+                    csvRows.push(row.join(','));
+                }
+            });
+            
+            const csvContent = csvRows.join('\n');
+            
+            updateProgress(100, `CSV generado con ${csvRows.length - 1} hijos`);
+            showLoading(false);
+            
+            // Descargar CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'hijos_originales.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert(`CSV generado con ${csvRows.length - 1} hijos.\nEl archivo se descargará como 'hijos_originales.csv'.\n\nColumnas (originales del CSV):\n- adherente\n- cedula_b\n- adherente nombre_b\n- adherente  apellido_b\n- adherente  fecha_nac2\n- adherente  ano2\n- socio cedula_a (referencia titular)\n\nPuedes copiar y pegar estos datos en el CSV de Supabase.`);
+        }
+        
+        function generarCSVHijosParaSupabase() {
+            if (!csvData || csvData.length === 0) {
+                alert('Primero carga el CSV original');
+                return;
+            }
+            
+            showLoading(true);
+            updateProgress(10, 'Procesando datos de hijos para Supabase...');
+            
+            // Función para generar hash simple para ID interno
+            const generarHash = (texto) => {
+                let hash = 0;
+                for (let i = 0; i < texto.length; i++) {
+                    const char = texto.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convertir a 32bit integer
+                }
+                return Math.abs(hash).toString();
+            };
+            
+            // Función para normalizar datos (todo en mayúsculas)
+            const normalizar = (texto) => {
+                if (!texto) return '';
+                return texto.toString().toUpperCase().trim().replace(/\s+/g, ' ');
+            };
+            
+            // Función para validar y limpiar fecha (sin conversión de formato)
+            const formatearFecha = (fecha) => {
+                if (!fecha) return '';
+                const fechaTrim = fecha.trim();
+                // Manejar varios formatos inválidos
+                if (fechaTrim === '' || fechaTrim === '-' || fechaTrim === '-   -' || fechaTrim === ' - -' || fechaTrim === '  -  -  ') {
+                    countFechaInvalida++;
+                    return '';
+                }
+                // Rechazar si contiene caracteres especiales o letras (excepto / y -)
+                if (/[^0-9\/\-]/.test(fechaTrim)) {
+                    console.warn('Fecha contiene caracteres inválidos:', fechaTrim);
+                    countFechaInvalida++;
+                    return '';
+                }
+                // Rechazar si es demasiado largo (probablemente datos corruptos)
+                if (fechaTrim.length > 20) {
+                    console.warn('Fecha demasiado larga (datos corruptos):', fechaTrim);
+                    countFechaInvalida++;
+                    return '';
+                }
+                // Si está en formato DD/MM/YYYY o YYYY-MM-DD, retornar tal cual
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fechaTrim)) {
+                    countFechaDDMMYYYY++;
+                    return fechaTrim;
+                }
+                if (/^\d{4}-\d{2}-\d{2}$/.test(fechaTrim)) {
+                    countFechaYYYYMMDD++;
+                    return fechaTrim;
+                }
+                console.warn('Formato de fecha no reconocido:', fechaTrim);
+                countFechaInvalida++;
+                return '';
+            };
+            
+            // Función para validar CI o generar ID interno
+            const validarCI = (ci, nombre, apellido) => {
+                if (!ci) {
+                    // Generar ID interno basado en nombre + apellido
+                    const idInterno = generarHash(`${nombre}_${apellido}`);
+                    return `INT-${idInterno}`; // Prefijo INT para identificar IDs internos
+                }
+                const ciNum = parseInt(ci.toString().trim());
+                if (isNaN(ciNum) || ciNum <= 0) {
+                    // CI inválido (0 o negativo), generar ID interno
+                    const idInterno = generarHash(`${nombre}_${apellido}`);
+                    return `INT-${idInterno}`;
+                }
+                return ciNum.toString();
+            };
+            
+            // Contadores para debugging
+            let countFechaYYYYMMDD = 0;
+            let countFechaDDMMYYYY = 0;
+            let countFechaYYYYSlashMMSlashDD = 0;
+            let countFechaInvalida = 0;
+            let countFechaCorregida = 0;
+            
+            // Organizar hijos por CI único (debido a restricción UNIQUE en Supabase)
+            const hijosMap = new Map();
+            
+            csvData.forEach(row => {
+                const hijoNombre = row['adherente nombre_b'] || '';
+                const hijoApellido = row['adherente  apellido_b'] || '';
+                const hijoCI = row['adherente  cedula_b'] || '';
+                const hijoFechaNac = row['adherente  fecha_nac2'] || '';
+                const hijoAno = row['adherente  ano2'] || '';
+                
+                // Solo procesar si hay datos de hijo (nombre y apellido son obligatorios)
+                if (hijoNombre && hijoApellido) {
+                    const nombreNorm = normalizar(hijoNombre);
+                    const apellidoNorm = normalizar(hijoApellido);
+                    const validCI = validarCI(hijoCI, nombreNorm, apellidoNorm);
+                    // Logging para ver formato original de fechas problemáticas
+                    if (hijoFechaNac && hijoFechaNac.includes('1955') && hijoFechaNac.includes('30')) {
+                        console.log(`Fecha original problemática: "${hijoFechaNac}"`);
+                    }
+                    const validFechaNac = formatearFecha(hijoFechaNac);
+                    
+                    // Si no hay fecha, intentar usar el año
+                    let fechaFinal = validFechaNac;
+                    if (!fechaFinal && hijoAno) {
+                        const anoNum = parseInt(hijoAno.toString().trim());
+                        if (!isNaN(anoNum) && anoNum > 1900 && anoNum < 2025) {
+                            fechaFinal = `${anoNum}-01-01`; // Usar 1 de enero del año como fecha por defecto
+                        }
+                    }
+                    
+                    // Crear clave única para deduplicación (solo CI debido a restricción UNIQUE en Supabase)
+                    const hijoKey = validCI || `NULL-${nombreNorm}_${apellidoNorm}`;
+                    
+                    if (!hijosMap.has(hijoKey)) {
+                        hijosMap.set(hijoKey, {
+                            nombre: nombreNorm,
+                            apellido: apellidoNorm,
+                            ci: validCI,
+                            fecha_nacimiento: fechaFinal
+                        });
+                    }
+                }
+            });
+            
+            const hijosArray = Array.from(hijosMap.values());
+            
+            // Logging: mostrar las primeras 10 fechas para verificar
+            console.log('Primeras 10 fechas en el CSV generado:');
+            hijosArray.slice(0, 10).forEach((h, i) => {
+                console.log(`${i + 1}. ${h.nombre} ${h.apellido}: ${h.fecha_nacimiento || '(vacía)'}`);
+            });
+            
+            // Contar cuántos tienen ID interno
+            const countIdInterno = hijosArray.filter(h => h.ci.startsWith('INT-')).length;
+            
+            updateProgress(50, `Generando CSV con ${hijosArray.length} hijos (${countIdInterno} con ID interno)...`);
+            
+            // Generar CSV con columnas de Supabase
+            const headers = ['nombre', 'apellido', 'ci', 'fecha_nacimiento'];
+            const csvRows = [headers.join(',')];
+            
+            hijosArray.forEach(hijo => {
+                const row = [
+                    `"${hijo.nombre}"`,
+                    `"${hijo.apellido}"`,
+                    hijo.ci || '',
+                    hijo.fecha_nacimiento ? `"${hijo.fecha_nacimiento}"` : ''
+                ];
+                csvRows.push(row.join(','));
+            });
+            
+            const csvContent = csvRows.join('\n');
+            
+            updateProgress(100, 'CSV generado');
+            showLoading(false);
+            
+            // Descargar CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `hijos_supabase_${timestamp}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert(`CSV generado con ${hijosArray.length} hijos únicos.\nEl archivo se descargará como 'hijos_supabase.csv'.\n\nEste CSV está formateado para subir directamente a Supabase.\nColumnas:\n- nombre (todo en mayúsculas)\n- apellido (todo en mayúsculas)\n- ci (número válido o ID interno INT-XXXXX)\n- fecha_nacimiento (formato original del CSV: DD/MM/YYYY o YYYY-MM-DD)\n\n${countIdInterno} hijos tienen ID interno (INT-XXXXX) porque no tenían CI válido.\n\nResumen de fechas:\n- DD/MM/YYYY: ${countFechaDDMMYYYY}\n- YYYY-MM-DD: ${countFechaYYYYMMDD}\n- Inválidas (vacías): ${countFechaInvalida}\n\nLas fechas se mantienen en el formato original del CSV (como en titulares y cónyuges).`);
+        }
+        
+        function generarCSVPlantillaHijos() {
+            // Generar CSV vacío con columnas de la tabla hijos de Supabase
+            const headers = ['nombre', 'apellido', 'ci', 'fecha_nacimiento'];
+            const csvContent = headers.join(',') + '\n';
+            
+            // Descargar CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'plantilla_hijos_supabase.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert('Plantilla CSV generada.\nEl archivo se descargará como "plantilla_hijos_supabase.csv".\n\nColumnas:\n- nombre\n- apellido\n- ci\n- fecha_nacimiento\n\nPuedes pegar los datos de tu CSV original en estas columnas y subirlo a Supabase.');
+        }
+        
+        async function recrearRelacionesHijoTitular() {
+            if (!csvData || csvData.length === 0) {
+                alert('Primero carga el CSV original');
+                return;
+            }
+            
+            if (!confirm('¿Recrear todas las relaciones hijo_titular desde el CSV original?\n\nEsto eliminará las relaciones existentes y creará nuevas relaciones basadas en el CSV.')) return;
+            
+            // Función simple de hash para generar IDs internos (misma que generarCSVHijosParaSupabase)
+            const generarHash = (str) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convertir a 32bit integer
+                }
+                return Math.abs(hash).toString();
+            };
+            
+            showLoading(true);
+            updateProgress(10, 'Eliminando relaciones existentes...');
+            
+            // Eliminar todas las relaciones existentes
+            const { error: deleteError } = await supabaseClient
+                .from('hijo_titular')
+                .delete()
+                .neq('hijo_id', 0);
+            
+            if (deleteError) {
+                console.error('Error eliminando relaciones:', deleteError);
+                showLoading(false);
+                alert('Error eliminando relaciones existentes');
+                return;
+            }
+            
+            updateProgress(20, 'Cargando titulares de Supabase...');
+            
+            // Cargar todos los titulares para mapear CI -> ID (con paginación)
+            let allTitulares = [];
+            let from = 0;
+            const pageSize = 1000;
+            let hasMore = true;
+            
+            while (hasMore) {
+                const { data: titulares, error: titularesError } = await supabaseClient
+                    .from('titulares')
+                    .select('id, ci')
+                    .range(from, from + pageSize - 1);
+                
+                if (titularesError) {
+                    console.error('Error cargando titulares:', titularesError);
+                    showLoading(false);
+                    alert('Error cargando titulares');
+                    return;
+                }
+                
+                if (titulares && titulares.length > 0) {
+                    allTitulares = allTitulares.concat(titulares);
+                    from += pageSize;
+                    hasMore = titulares.length === pageSize;
+                } else {
+                    hasMore = false;
+                }
+            }
+            
+            const titulares = allTitulares;
+            
+            // Crear mapa CI -> ID de titular
+            const titularMap = new Map();
+            titulares.forEach(t => {
+                if (t.ci) titularMap.set(t.ci.toString(), t.id);
+            });
+            
+            updateProgress(40, 'Cargando hijos de Supabase...');
+            
+            // Cargar todos los hijos para mapear CI -> ID (con paginación)
+            let allHijos = [];
+            from = 0;
+            hasMore = true;
+            
+            while (hasMore) {
+                const { data: hijos, error: hijosError } = await supabaseClient
+                    .from('hijos')
+                    .select('id, ci, nombre, apellido')
+                    .range(from, from + pageSize - 1);
+                
+                if (hijosError) {
+                    console.error('Error cargando hijos:', hijosError);
+                    showLoading(false);
+                    alert('Error cargando hijos');
+                    return;
+                }
+                
+                if (hijos && hijos.length > 0) {
+                    allHijos = allHijos.concat(hijos);
+                    from += pageSize;
+                    hasMore = hijos.length === pageSize;
+                } else {
+                    hasMore = false;
+                }
+            }
+            
+            const hijos = allHijos;
+            
+            // Crear mapa CI -> ID de hijo
+            const hijoMap = new Map();
+            hijos.forEach(h => {
+                if (h.ci) hijoMap.set(h.ci.toString(), h.id);
+            });
+            
+            // Crear mapa nombre+apellido -> ID de hijo (para hijos sin CI)
+            const hijoNombreMap = new Map();
+            hijos.forEach(h => {
+                const key = `${h.nombre}_${h.apellido}`.toUpperCase();
+                hijoNombreMap.set(key, h.id);
+            });
+            
+            updateProgress(60, 'Procesando relaciones del CSV...');
+            
+            // Procesar relaciones desde el CSV
+            const relacionesSet = new Set(); // Para deduplicar
+            const errores = [];
+            let countTitularNoEncontrado = 0;
+            let countHijoNoEncontrado = 0;
+            let countDuplicados = 0;
+            
+            csvData.forEach(row => {
+                const titularCI = row['socio cedula_a'] || '';
+                const hijoNombre = row['adherente nombre_b'] || '';
+                const hijoApellido = row['adherente  apellido_b'] || '';
+                const hijoCI = row['adherente  cedula_b'] || '';
+                
+                if (titularCI && hijoNombre && hijoApellido) {
+                    // Buscar ID del titular
+                    const titularId = titularMap.get(titularCI.toString());
+                    if (!titularId) {
+                        countTitularNoEncontrado++;
+                        if (countTitularNoEncontrado <= 10) {
+                            errores.push(`Titular CI ${titularCI} no encontrado`);
+                        }
+                        return;
+                    }
+                    
+                    // Buscar ID del hijo
+                    let hijoId = null;
+                    let hijoCIKey = null;
+                    if (hijoCI) {
+                        const ciNum = parseInt(hijoCI.toString().trim());
+                        if (ciNum > 0) {
+                            hijoId = hijoMap.get(hijoCI.toString());
+                        } else {
+                            // CI=0 o inválido, generar ID interno
+                            // Normalizar espacios múltiples a espacio simple
+                            const nombreNorm = hijoNombre.replace(/\s+/g, ' ').trim();
+                            const apellidoNorm = hijoApellido.replace(/\s+/g, ' ').trim();
+                            const idInterno = generarHash(`${nombreNorm}_${apellidoNorm}`);
+                            hijoCIKey = `INT-${idInterno}`;
+                            hijoId = hijoMap.get(hijoCIKey);
+                        }
+                    }
+                    if (!hijoId) {
+                        const hijoKey = `${hijoNombre}_${hijoApellido}`.toUpperCase();
+                        hijoId = hijoNombreMap.get(hijoKey);
+                    }
+                    if (!hijoId) {
+                        countHijoNoEncontrado++;
+                        if (countHijoNoEncontrado <= 10) {
+                            errores.push(`Hijo ${hijoNombre} ${hijoApellido} (CI: ${hijoCI || 'N/A'}, ID interno: ${hijoCIKey || 'N/A'}) no encontrado`);
+                        }
+                        return;
+                    }
+                    
+                    // Crear clave única para deduplicación
+                    const relationKey = `${hijoId}_${titularId}`;
+                    if (relacionesSet.has(relationKey)) {
+                        countDuplicados++;
+                        return;
+                    }
+                    relacionesSet.add(relationKey);
+                }
+            });
+            
+            // Convertir Set a array de relaciones
+            const relaciones = Array.from(relacionesSet).map(key => {
+                const [hijoId, titularId] = key.split('_');
+                return { hijo_id: parseInt(hijoId), titular_id: parseInt(titularId) };
+            });
+            
+            updateProgress(80, `Insertando ${relaciones.length} relaciones...`);
+            
+            // Insertar relaciones en batches
+            const batchSize = 200;
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (let i = 0; i < relaciones.length; i += batchSize) {
+                const batch = relaciones.slice(i, i + batchSize);
+                const { error: insertError } = await supabaseClient
+                    .from('hijo_titular')
+                    .insert(batch);
+                
+                if (insertError) {
+                    console.error('Error insertando batch:', insertError);
+                    errorCount += batch.length;
+                } else {
+                    successCount += batch.length;
+                }
+                
+                updateProgress(80 + Math.floor((i / relaciones.length) * 20), `Insertando relaciones... (${successCount}/${relaciones.length})`);
+            }
+            
+            updateProgress(100, 'Procesamiento completado');
+            showLoading(false);
+            
+            let report = `=== REPORTE DE RECREACIÓN DE RELACIONES HIJO_TITULAR ===\n\n`;
+            report += `Relaciones únicas encontradas: ${relaciones.length}\n`;
+            report += `Relaciones duplicadas eliminadas: ${countDuplicados}\n`;
+            report += `Relaciones insertadas: ${successCount}\n`;
+            report += `Errores de inserción: ${errorCount}\n`;
+            report += `Errores de búsqueda: ${countTitularNoEncontrado + countHijoNoEncontrado}\n`;
+            report += `  - Titulares no encontrados: ${countTitularNoEncontrado}\n`;
+            report += `  - Hijos no encontrados: ${countHijoNoEncontrado}\n\n`;
+            
+            if (errores.length > 0) {
+                report += `=== PRIMEROS 10 ERRORES DE BÚSQUEDA ===\n`;
+                errores.slice(0, 10).forEach(err => {
+                    report += `❌ ${err}\n`;
+                });
+            }
+            
+            // Mostrar reporte en área de texto copiable
+            const reportArea = document.getElementById('validationReportText');
+            const reportDiv = document.getElementById('validationReport');
+            reportArea.value = report;
+            reportDiv.style.display = 'block';
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function limpiarHijosCompletamente() {
+            if (!confirm('⚠️ ¿ELIMINAR TODOS LOS HIJOS Y SUS RELACIONES?\n\nEsta acción eliminará:\n- TODOS los registros de la tabla "hijos"\n- TODAS las relaciones de la tabla "hijo_titular"\n\nEsta acción es IRREVERSIBLE. Asegúrate de haber generado el CSV de respaldo antes de continuar.')) return;
+            
+            if (!confirm('¿Estás ABSOLUTAMENTE seguro? Esta acción no se puede deshacer.')) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Contando registros a eliminar...');
+            
+            // Contar registros actuales
+            const { count: countHijos } = await supabaseClient
+                .from('hijos')
+                .select('*', { count: 'exact', head: true });
+            
+            const { count: countRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('*', { count: 'exact', head: true });
+            
+            console.log(`Registros a eliminar: ${countHijos} hijos, ${countRelaciones} relaciones`);
+            
+            updateProgress(30, 'Eliminando relaciones hijo_titular...');
+            
+            // Primero eliminar todas las relaciones hijo_titular
+            const { error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .delete()
+                .neq('hijo_id', 0); // Eliminar todos
+            
+            if (errorRelaciones) {
+                console.error('Error eliminando relaciones:', errorRelaciones);
+                showLoading(false);
+                alert('Error eliminando relaciones hijo_titular');
+                return;
+            }
+            
+            updateProgress(60, 'Eliminando registros de hijos...');
+            
+            // Luego eliminar todos los registros de hijos
+            const { error: errorHijos } = await supabaseClient
+                .from('hijos')
+                .delete()
+                .neq('id', 0); // Eliminar todos
+            
+            if (errorHijos) {
+                console.error('Error eliminando hijos:', errorHijos);
+                showLoading(false);
+                alert('Error eliminando hijos');
+                return;
+            }
+            
+            updateProgress(100, 'Limpieza completada');
+            showLoading(false);
+            
+            alert(`Limpieza completada:\n- ${countRelaciones} relaciones hijo_titular eliminadas\n- ${countHijos} registros de hijos eliminados\n\nLa base de datos está lista para recibir los nuevos datos.`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        async function diagnosticarHijosTitular() {
+            const ci = prompt('Ingrese el CI del titular a diagnosticar (ej: 1685843):');
+            if (!ci) return;
+            
+            showLoading(true);
+            updateProgress(10, 'Buscando titular...');
+            
+            // Buscar el titular
+            const { data: titular, error: errorTitular } = await supabaseClient
+                .from('titulares')
+                .select('id, ci, nombre, apellido')
+                .eq('ci', ci)
+                .single();
+            
+            if (errorTitular || !titular) {
+                console.error('Error buscando titular:', errorTitular);
+                showLoading(false);
+                alert('Titular no encontrado');
+                return;
+            }
+            
+            updateProgress(30, 'Buscando relaciones hijo_titular...');
+            
+            // Buscar todas las relaciones hijo_titular para este titular
+            const { data: relaciones, error: errorRelaciones } = await supabaseClient
+                .from('hijo_titular')
+                .select('hijo_id, titular_id')
+                .eq('titular_id', titular.id);
+            
+            if (errorRelaciones) {
+                console.error('Error buscando relaciones:', errorRelaciones);
+                showLoading(false);
+                alert('Error buscando relaciones');
+                return;
+            }
+            
+            updateProgress(50, 'Buscando detalles de hijos...');
+            
+            // Buscar los detalles de los hijos
+            const hijoIds = relaciones.map(r => r.hijo_id);
+            const { data: hijos, error: errorHijos } = await supabaseClient
+                .from('hijos')
+                .select('id, nombre, apellido, ci, fecha_nacimiento')
+                .in('id', hijoIds);
+            
+            if (errorHijos) {
+                console.error('Error buscando hijos:', errorHijos);
+                showLoading(false);
+                alert('Error buscando hijos');
+                return;
+            }
+            
+            updateProgress(100, 'Diagnóstico completado');
+            showLoading(false);
+            
+            // Generar reporte
+            let reporte = `=== DIAGNÓSTICO TITULAR ===\n`;
+            reporte += `ID: ${titular.id}\n`;
+            reporte += `CI: ${titular.ci}\n`;
+            reporte += `Nombre: ${titular.nombre} ${titular.apellido}\n\n`;
+            
+            reporte += `=== RELACIONES HIJO_TITULAR (${relaciones.length}) ===\n`;
+            relaciones.forEach((rel, i) => {
+                reporte += `${i + 1}. hijo_id=${rel.hijo_id}, titular_id=${rel.titular_id}\n`;
+            });
+            
+            reporte += `\n=== HIJOS (${hijos.length}) ===\n`;
+            hijos.forEach((hijo, i) => {
+                reporte += `${i + 1}. ${hijo.nombre} ${hijo.apellido} (ID: ${hijo.id}, CI: ${hijo.ci || 'N/A'}, Fecha: ${hijo.fecha_nacimiento || 'N/A'})\n`;
+            });
+            
+            // Verificar duplicados en relaciones
+            const relacionesPorHijo = new Map();
+            relaciones.forEach(rel => {
+                if (relacionesPorHijo.has(rel.hijo_id)) {
+                    relacionesPorHijo.set(rel.hijo_id, relacionesPorHijo.get(rel.hijo_id) + 1);
+                } else {
+                    relacionesPorHijo.set(rel.hijo_id, 1);
+                }
+            });
+            
+            let duplicados = 0;
+            relacionesPorHijo.forEach((count, hijoId) => {
+                if (count > 1) {
+                    duplicados++;
+                    const hijo = hijos.find(h => h.id === hijoId);
+                    reporte += `\n⚠️ HIJO DUPLICADO: ${hijo ? hijo.nombre + ' ' + hijo.apellido : 'ID ' + hijoId} (${count} relaciones)`;
+                }
+            });
+            
+            if (duplicados === 0) {
+                reporte += `\n✅ No hay relaciones duplicadas para este titular`;
+            }
+            
+            console.log(reporte);
+            
+            // Mostrar en área de texto copiable
+            const reporteDiv = document.getElementById('diagnosticoReport');
+            const reporteText = document.getElementById('diagnosticoReportText');
+            reporteText.value = reporte;
+            reporteDiv.style.display = 'block';
+        }
+        
+        async function saveChanges() {
+            if (!confirm('¿Guardar todos los cambios en Supabase? Esta acción modificará la base de datos.')) return;
+            
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const result of filteredResults) {
+                if (result.status === 'missing') {
+                    try {
+                        await supabaseClient.from('titulares').insert({
+                            ci: result.ci,
+                            nombre: result.csv.Nombre || result.csv.nombre,
+                            apellido: result.csv.Apellido || result.csv.apellido,
+                            habilitado: true
+                        });
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        console.error(`Error insertando ${result.ci}:`, error);
+                    }
+                } else if (result.status === 'diff') {
+                    try {
+                        await supabaseClient.from('titulares')
+                            .update({
+                                nombre: result.csv.Nombre || result.csv.nombre,
+                                apellido: result.csv.Apellido || result.csv.apellido
+                            })
+                            .eq('ci', result.ci);
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        console.error(`Error actualizando ${result.ci}:`, error);
+                    }
+                }
+            }
+            
+            alert(`Cambios guardados: ${successCount} exitosos, ${errorCount} errores`);
+            
+            // Recargar datos
+            await loadSupabaseData();
+            compareData();
+        }
+        
+        function exportCSV() {
+            const headers = Object.keys(csvData[0]);
+            const rows = filteredResults.map(r => r.csv);
+            
+            let csvContent = headers.join(',') + '\n';
+            rows.forEach(row => {
+                const values = headers.map(header => `"${row[header] || ''}"`);
+                csvContent += values.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'socios_corregidos.csv';
+            a.click();
+        }
+        
+        function showLoading(show) {
+            loading.classList.toggle('active', show);
+        }
+        
+        function updateProgress(percent, text) {
+            progressFill.style.width = percent + '%';
+            loadingText.textContent = text + ' (' + percent + '%)';
+        }
+    </script>
+</body>
+</html>
