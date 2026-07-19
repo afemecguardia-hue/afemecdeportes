@@ -2,19 +2,18 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Verificar CI en Supabase</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <title>Verificar CI - Oracle</title>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
         .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
-        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto; font-size: 12px; }
-        input { padding: 0.5rem; margin-right: 0.5rem; }
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 600px; overflow: auto; font-size: 12px; }
+        input { padding: 0.5rem; margin-right: 0.5rem; width: 200px; }
         button { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Verificar CI en Supabase</h2>
+        <h2>Verificar CI en Oracle</h2>
         <input type="text" id="ciInput" placeholder="Ingresa CI" value="1045174">
         <button onclick="verificar()">Verificar</button>
     </div>
@@ -24,113 +23,64 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
-        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const API_URL = window.location.protocol + '//' + window.location.hostname + ':3046';
+        async function api(table, params) {
+            const qs = Object.entries(params).map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            const r = await fetch(`${API_URL}/api/rest/${table}?${qs}`);
+            return r.json();
+        }
 
         async function verificar() {
             const ci = document.getElementById('ciInput').value.trim();
             const result = document.getElementById('result');
             result.textContent = 'Buscando...';
+            let output = '';
 
-            // Buscar todos los registros con ese CI
-            const { data, error } = await supa
-                .from('socios')
-                .select('id, ci, nombre, apellido, tipo, familia_id, fecha_nacimiento, habilitado')
-                .eq('ci', ci);
-
-            if (error) {
-                result.textContent = 'Error: ' + error.message;
-                return;
+            // Buscar en titulares
+            const { data: titulares } = await api('titulares', { select: 'id,ci,nombre,apellido,fecha_nacimiento,habilitado', ci: 'eq.' + ci });
+            if (titulares && titulares.length) {
+                output += `=== TITULARES (${titulares.length}) ===\n\n`;
+                titulares.forEach(t => {
+                    output += `ID: ${t.id} | CI: ${t.ci} | ${t.nombre} ${t.apellido} | Nac: ${t.fecha_nacimiento || 'N/A'} | ${t.habilitado ? 'Habilitado' : 'Deshabilitado'}\n`;
+                });
+                output += '\n';
             }
 
-            if (!data || data.length === 0) {
-                result.textContent = 'No se encontraron registros con ese CI';
-                return;
-            }
-
-            let output = `Se encontraron ${data.length} registro(s) con CI ${ci}:\n\n`;
-            
-            data.forEach((socio, index) => {
-                output += `--- Registro ${index + 1} ---\n`;
-                output += `ID: ${socio.id}\n`;
-                output += `CI: ${socio.ci}\n`;
-                output += `Nombre: ${socio.nombre}\n`;
-                output += `Apellido: ${socio.apellido}\n`;
-                output += `Tipo: ${socio.tipo}\n`;
-                output += `familia_id: ${socio.familia_id}\n`;
-                output += `fecha_nacimiento: ${socio.fecha_nacimiento}\n`;
-                output += `habilitado: ${socio.habilitado}\n\n`;
-            });
-
-            // Si es titular, buscar sus familiares
-            const titular = data.find(s => s.tipo === 'titular');
-            if (titular) {
-                const { data: fam } = await supa
-                    .from('socios')
-                    .select('id, ci, nombre, apellido, tipo, familia_id, fecha_nacimiento')
-                    .eq('familia_id', titular.id);
-                
-                output += `--- Familiares del titular ${titular.id} ---\n`;
-                output += `Total: ${fam ? fam.length : 0}\n\n`;
-                
-                if (fam && fam.length > 0) {
-                    fam.forEach((f, index) => {
-                        output += `Familiar ${index + 1}:\n`;
-                        output += `  ID: ${f.id}\n`;
-                        output += `  CI: ${f.ci}\n`;
-                        output += `  Nombre: ${f.nombre} ${f.apellido}\n`;
-                        output += `  Tipo: ${f.tipo}\n`;
-                        output += `  familia_id: ${f.familia_id}\n`;
-                        output += `  fecha_nacimiento: ${f.fecha_nacimiento}\n\n`;
-                    });
+            // Buscar en cónyuges
+            const { data: conyuges } = await api('conyuges', { select: 'id,ci,nombre,apellido,fecha_nacimiento,titular_id', ci: 'eq.' + ci });
+            if (conyuges && conyuges.length) {
+                output += `=== CONYUGES (${conyuges.length}) ===\n\n`;
+                for (const c of conyuges) {
+                    const { data: tit } = c.titular_id ? await api('titulares', { select: 'id,ci,nombre,apellido', id: 'eq.' + c.titular_id }) : { data: null };
+                    output += `ID: ${c.id} | CI: ${c.ci} | ${c.nombre} ${c.apellido} | Nac: ${c.fecha_nacimiento || 'N/A'}`;
+                    if (tit && tit[0]) output += ` | Titular: ${tit[0].nombre} ${tit[0].apellido} (CI: ${tit[0].ci})`;
+                    output += '\n';
                 }
+                output += '\n';
             }
 
-            // Si es cónyuge, buscar también el titular al que pertenece
-            const conyuge = data.find(s => s.tipo === 'conyuge');
-            if (conyuge && conyuge.familia_id) {
-                const { data: tit } = await supa
-                    .from('socios')
-                    .select('id, ci, nombre, apellido, tipo, familia_id')
-                    .eq('id', conyuge.familia_id)
-                    .single();
-                
-                if (tit) {
-                    output += `--- Titular al que pertenece el cónyuge (ID: ${conyuge.familia_id}) ---\n`;
-                    output += `ID: ${tit.id}\n`;
-                    output += `CI: ${tit.ci}\n`;
-                    output += `Nombre: ${tit.nombre} ${tit.apellido}\n`;
-                    output += `Tipo: ${tit.tipo}\n`;
-                    output += `familia_id: ${tit.familia_id}\n\n`;
-
-                    // Buscar familiares de ese titular
-                    const { data: fam } = await supa
-                        .from('socios')
-                        .select('id, ci, nombre, apellido, tipo, familia_id, fecha_nacimiento')
-                        .eq('familia_id', tit.id);
-                    
-                    output += `--- Familiares del titular ${tit.id} ---\n`;
-                    output += `Total: ${fam ? fam.length : 0}\n\n`;
-                    
-                    if (fam && fam.length > 0) {
-                        fam.forEach((f, index) => {
-                            output += `Familiar ${index + 1}:\n`;
-                            output += `  ID: ${f.id}\n`;
-                            output += `  CI: ${f.ci}\n`;
-                            output += `  Nombre: ${f.nombre} ${f.apellido}\n`;
-                            output += `  Tipo: ${f.tipo}\n`;
-                            output += `  familia_id: ${f.familia_id}\n`;
-                            output += `  fecha_nacimiento: ${f.fecha_nacimiento}\n\n`;
-                        });
+            // Buscar en hijos
+            const { data: hijos } = await api('hijos', { select: 'id,ci,nombre,apellido,fecha_nacimiento', ci: 'eq.' + ci });
+            if (hijos && hijos.length) {
+                output += `=== HIJOS (${hijos.length}) ===\n\n`;
+                for (const h of hijos) {
+                    const { data: padres } = await api('hijo_titular', { select: 'titular:titulares(id,ci,nombre,apellido)', hijo_id: 'eq.' + h.id });
+                    output += `ID: ${h.id} | CI: ${h.ci} | ${h.nombre} ${h.apellido} | Nac: ${h.fecha_nacimiento || 'N/A'}`;
+                    if (padres && padres.length) {
+                        const padresStr = padres.map(p => `${p.titular?.nombre || ''} ${p.titular?.apellido || ''} (CI: ${p.titular?.ci || 'N/A'})`).join(', ');
+                        output += ` | Titulares: ${padresStr}`;
                     }
+                    output += '\n';
                 }
+                output += '\n';
+            }
+
+            if (!titulares && !conyuges && !hijos) {
+                output = 'No se encontraron registros con ese CI';
             }
 
             result.textContent = output;
         }
-
-        // Verificar automáticamente al cargar
         verificar();
     </script>
 </body>

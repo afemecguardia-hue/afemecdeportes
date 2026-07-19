@@ -2,66 +2,85 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Verificar Relaciones</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <title>Verificar Relaciones - Oracle</title>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
         .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 600px; overflow: auto; font-size: 12px; }
         button { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Verificar Relaciones</h2>
-        <button onclick="verificar()">Verificar todas las relaciones</button>
+        <h2>Verificar Relaciones Familiares</h2>
+        <p style="color:#666;font-size:14px;">Muestra las relaciones entre titulares, cónyuges e hijos.</p>
+        <button onclick="verificar()">Cargar relaciones</button>
     </div>
     <div class="card">
         <h3>Resultados</h3>
         <pre id="result"></pre>
     </div>
-
     <script>
-        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
-        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const API_URL = window.location.protocol + '//' + window.location.hostname + ':3046';
+        async function api(table, params) {
+            const qs = Object.entries(params).map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            const r = await fetch(`${API_URL}/api/rest/${table}?${qs}`);
+            return r.json();
+        }
 
         async function verificar() {
-            const resultEl = document.getElementById('result');
-            resultEl.textContent = 'Buscando...';
-            
-            // Buscar todas las relaciones
-            const { data: relaciones, error } = await supa.from('conyuge_relacion').select('id, titular1_id, titular2_id');
-            
-            if (error) {
-                resultEl.textContent = 'Error: ' + error.message;
-                return;
+            const result = document.getElementById('result');
+            result.textContent = 'Cargando...';
+            let output = '';
+
+            // Relaciones cónyuge
+            const { data: relaciones } = await api('conyuge_relacion', { select: 'id,titular1_id,titular2_id' });
+            output += `=== CONYUGE_RELACION: ${relaciones ? relaciones.length : 0} registros ===\n\n`;
+            if (relaciones) {
+                for (let i = 0; i < Math.min(relaciones.length, 30); i++) {
+                    const r = relaciones[i];
+                    const { data: t1 } = await api('titulares', { select: 'id,ci,nombre,apellido', id: 'eq.' + r.titular1_id });
+                    const { data: t2 } = await api('titulares', { select: 'id,ci,nombre,apellido', id: 'eq.' + r.titular2_id });
+                    const n1 = t1 && t1[0] ? `${t1[0].nombre} ${t1[0].apellido} (${t1[0].ci})` : '???';
+                    const n2 = t2 && t2[0] ? `${t2[0].nombre} ${t2[0].apellido} (${t2[0].ci})` : '???';
+                    output += `#${r.id}: ${n1} <-> ${n2}\n`;
+                }
+                if (relaciones.length > 30) output += `... y ${relaciones.length - 30} más\n`;
             }
-            
-            let output = `Total de relaciones: ${relaciones.length}\n\n`;
-            
-            // Buscar IDs de los titulares 2365691 y 2370824
-            const { data: t1 } = await supa.from('titulares').select('id').eq('ci', '2365691').maybeSingle();
-            const { data: t2 } = await supa.from('titulares').select('id').eq('ci', '2370824').maybeSingle();
-            
-            output += `ID de 2365691: ${t1 ? t1.id : 'NO ENCONTRADO'}\n`;
-            output += `ID de 2370824: ${t2 ? t2.id : 'NO ENCONTRADO'}\n\n`;
-            
-            // Buscar relaciones específicas
-            const rel1 = relaciones.find(r => r.titular1_id === t1?.id && r.titular2_id === t2?.id);
-            const rel2 = relaciones.find(r => r.titular1_id === t2?.id && r.titular2_id === t1?.id);
-            
-            output += `Relación 2365691->2370824: ${rel1 ? 'ENCONTRADA' : 'NO ENCONTRADA'}\n`;
-            output += `Relación 2370824->2365691: ${rel2 ? 'ENCONTRADA' : 'NO ENCONTRADA'}\n\n`;
-            
-            // Mostrar las primeras 10 relaciones
-            output += '=== Primeras 10 relaciones ===\n';
-            relaciones.slice(0, 10).forEach(r => {
-                output += `titular1_id: ${r.titular1_id}, titular2_id: ${r.titular2_id}\n`;
-            });
-            
-            resultEl.textContent = output;
+
+            // Hijo_titular relations
+            const { data: ht } = await api('hijo_titular', { select: 'id,titular_id,hijo_id', limit: '50' });
+            output += `\n=== HIJO_TITULAR: ${ht ? ht.length : 0}+ registros ===\n\n`;
+            if (ht) {
+                for (let i = 0; i < Math.min(ht.length, 20); i++) {
+                    const r = ht[i];
+                    const { data: t } = await api('titulares', { select: 'id,nombre,apellido', id: 'eq.' + r.titular_id });
+                    const { data: h } = await api('hijos', { select: 'id,nombre,apellido', id: 'eq.' + r.hijo_id });
+                    const tn = t && t[0] ? `${t[0].nombre} ${t[0].apellido}` : '???';
+                    const hn = h && h[0] ? `${h[0].nombre} ${h[0].apellido}` : '???';
+                    output += `#${r.id}: Titular ${tn} -> Hijo ${hn}\n`;
+                }
+            }
+
+            // Stats
+            const { data: titulares } = await api('titulares', { select: 'id', limit: '1' });
+            const { data: conyuges } = await api('conyuges', { select: 'id', limit: '1' });
+            const { data: hijos } = await api('hijos', { select: 'id', limit: '1' });
+            const r1 = await fetch(`${API_URL}/api/rest/titulares?select=id&head=true&count=exact`);
+            const j1 = await r1.json();
+            const r2 = await fetch(`${API_URL}/api/rest/conyuges?select=id&head=true&count=exact`);
+            const j2 = await r2.json();
+            const r3 = await fetch(`${API_URL}/api/rest/hijos?select=id&head=true&count=exact`);
+            const j3 = await r3.json();
+
+            output += `\n=== TOTALES ===\n`;
+            output += `Titulares: ${j1.count || 0}\n`;
+            output += `Cónyuges: ${j2.count || 0}\n`;
+            output += `Hijos: ${j3.count || 0}\n`;
+
+            result.textContent = output;
         }
+        verificar();
     </script>
 </body>
 </html>
