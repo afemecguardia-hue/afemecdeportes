@@ -1,6 +1,4 @@
-const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = oracleClient;
 
 let categoriasConfig = [];
 let canchasList = [];
@@ -504,7 +502,8 @@ function seleccionarFamiliar() {
 function calcularEdadDesdeFecha(fechaNac) {
     if (!fechaNac) return -1;
     const hoy = new Date();
-    const nac = new Date(fechaNac + 'T12:00:00');
+    const dateStr = (typeof fechaNac === 'string' && fechaNac.includes('T')) ? fechaNac.split('T')[0] : fechaNac;
+    const nac = new Date(dateStr + 'T12:00:00');
     if (isNaN(nac.getTime())) return -1;
     let edad = hoy.getFullYear() - nac.getFullYear();
     const mes = hoy.getMonth() - nac.getMonth();
@@ -4464,8 +4463,9 @@ async function buscarSocioAdmin() {
                                 <strong style="color: white;">${atletaNombre} ${atletaApellido}</strong>
                                 <span style="color: var(--text-muted); font-size: 13px; margin-left: 0.5rem;">(CI: ${atletaCi})</span>
                             </div>
-                            <div style="color: var(--accent-color); font-weight: 500;">
-                                ${atletaEdad}
+                            <div style="display:flex;align-items:center;gap:0.75rem;">
+                                <span style="color: var(--accent-color); font-weight: 500;">${atletaEdad}</span>
+                                <button onclick="editarAtleta(${a.id})" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">Editar</button>
                             </div>
                         </div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top: 0.25rem;">
@@ -4492,6 +4492,56 @@ async function buscarSocioAdmin() {
     document.getElementById('admin-busq-familia').innerHTML = familiaHtml;
     document.getElementById('admin-busq-atletas').innerHTML = atletasHtml;
     resultado.style.display = 'block';
+}
+
+async function editarAtleta(id) {
+    const { data: atleta } = await supabaseClient
+        .from('atletas')
+        .select('id, nombre_atleta, apellido_atleta, ci_atleta, fecha_nacimiento_atleta, telefono_atleta, categoria_id')
+        .eq('id', id)
+        .single();
+    if (!atleta) return alert('Error al cargar atleta');
+    document.getElementById('edit-atleta-id').value = atleta.id;
+    document.getElementById('edit-atleta-nombre').value = atleta.nombre_atleta || '';
+    document.getElementById('edit-atleta-apellido').value = atleta.apellido_atleta || '';
+    document.getElementById('edit-atleta-ci').value = atleta.ci_atleta || '';
+    document.getElementById('edit-atleta-fecha-nac').value = atleta.fecha_nacimiento_atleta || '';
+    document.getElementById('edit-atleta-telefono').value = atleta.telefono_atleta || '';
+    const catSelect = document.getElementById('edit-atleta-categoria');
+    catSelect.innerHTML = '<option value="">Sin categoría</option>';
+    const { data: cats } = await supabaseClient.from('categorias_config').select('id, nombre');
+    if (cats) {
+        cats.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nombre;
+            if (c.id === atleta.categoria_id) opt.selected = true;
+            catSelect.appendChild(opt);
+        });
+    }
+    document.getElementById('modal-editar-atleta').style.display = 'flex';
+}
+
+function cerrarModalAtleta() {
+    document.getElementById('modal-editar-atleta').style.display = 'none';
+}
+
+async function guardarAtleta() {
+    const id = document.getElementById('edit-atleta-id').value;
+    const data = {
+        nombre_atleta: document.getElementById('edit-atleta-nombre').value.trim(),
+        apellido_atleta: document.getElementById('edit-atleta-apellido').value.trim(),
+        ci_atleta: document.getElementById('edit-atleta-ci').value.trim(),
+        fecha_nacimiento_atleta: document.getElementById('edit-atleta-fecha-nac').value || null,
+        telefono_atleta: document.getElementById('edit-atleta-telefono').value.trim() || null,
+        categoria_id: document.getElementById('edit-atleta-categoria').value || null
+    };
+    if (!data.nombre_atleta) return alert('El nombre es obligatorio');
+    const { error } = await supabaseClient.from('atletas').update(data).eq('id', parseInt(id));
+    if (error) return alert('Error al guardar: ' + error.message);
+    cerrarModalAtleta();
+    alert('Atleta actualizado correctamente');
+    buscarSocioAdmin();
 }
 
 function cargarFaltaUI() {

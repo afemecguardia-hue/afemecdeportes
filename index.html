@@ -1043,9 +1043,9 @@
         <p>Todos los derechos reservados.</p>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="db.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
 
 
 
@@ -1155,6 +1155,47 @@
         }
     })();
     </script>
+<!-- ========== MODAL EDITAR ATLETA ========== -->
+<div id="modal-editar-atleta" class="modal-overlay" style="display:none;" onclick="if(event.target===this)cerrarModalAtleta()">
+    <div class="modal" style="max-width:600px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+            <h3 style="margin:0;color:white;">Editar Atleta</h3>
+            <button onclick="cerrarModalAtleta()" style="background:none;border:none;color:var(--text-muted);font-size:24px;cursor:pointer;padding:0;line-height:1;">&times;</button>
+        </div>
+        <input type="hidden" id="edit-atleta-id">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" id="edit-atleta-nombre" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>Apellido</label>
+                <input type="text" id="edit-atleta-apellido" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>CI</label>
+                <input type="text" id="edit-atleta-ci" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>Fecha Nacimiento</label>
+                <input type="date" id="edit-atleta-fecha-nac" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="edit-atleta-telefono" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>Categoría</label>
+                <select id="edit-atleta-categoria" class="form-input"></select>
+            </div>
+        </div>
+        <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1.5rem;">
+            <button onclick="cerrarModalAtleta()" class="btn-cancel" style="background:rgba(255,255,255,0.08);border:none;padding:10px 24px;border-radius:8px;color:white;cursor:pointer;">Cancelar</button>
+            <button onclick="guardarAtleta()" class="btn-search">Guardar Cambios</button>
+        </div>
+    </div>
+</div>
+
 <!-- ========== MODAL PERFIL DE EQUIPO ========== -->
 <div id="modal-perfil-equipo" class="modal-perfil" style="display:none;">
     <div class="modal-perfil-backdrop" onclick="cerrarPerfilEquipo()"></div>

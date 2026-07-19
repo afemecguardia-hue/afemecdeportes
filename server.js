@@ -2,7 +2,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3045;
+try { require('dotenv').config(); } catch {}
+const PORT = process.env.STATIC_PORT || process.env.PORT || 3045;
 
 const MIME_TYPES = {
     '.html': 'text/html',

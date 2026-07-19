@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Importar CSV - AFEMEC</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
         .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
@@ -20,7 +19,7 @@
 </head>
 <body>
     <div class="card">
-        <h2>Importar CSV de Socios a Supabase</h2>
+        <h2>Importar CSV de Socios a Oracle</h2>
         <p>Selecciona el archivo <strong>SOCIOS ACTIVOS UNIFICADOS 17.06 CON FECHAS.csv</strong></p>
         <input type="file" id="csvFile" accept=".csv">
         <button id="btnImport" onclick="importar()">Importar</button>
@@ -38,12 +37,44 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://mrshoeaovukolclsvypy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hvZWFvdnVrb2xjbHN2eXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3ODAwNDAsImV4cCI6MjA5NzM1NjA0MH0.2mTVIaRy3KBRrcIHSiL6FC6SBz3f_hiicFSjTIkkThI';
-        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const API_URL = window.location.protocol + '//' + window.location.hostname + ':3046';
+        const logEl = document.getElementById('log');
+        function addLog(msg) { logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
 
-        const log = document.getElementById('log');
-        function addLog(msg) { log.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`; log.scrollTop = log.scrollHeight; }
+        async function apiGet(table, params) {
+            const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            const resp = await fetch(`${API_URL}/api/rest/${table}?${qs}`);
+            return resp.json();
+        }
+
+        async function apiPost(table, data) {
+            const resp = await fetch(`${API_URL}/api/rest/${table}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+            });
+            return resp.json();
+        }
+
+        async function apiPatch(table, filters, data) {
+            const qs = Object.entries(filters).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            const resp = await fetch(`${API_URL}/api/rest/${table}?${qs}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+            });
+            return resp.json();
+        }
+
+        async function apiDelete(table, filters) {
+            const qs = Object.entries(filters).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            const resp = await fetch(`${API_URL}/api/rest/${table}?${qs}`, { method: 'DELETE' });
+            return resp.json();
+        }
+
+        async function apiUpsert(table, rows, onConflict) {
+            const resp = await fetch(`${API_URL}/api/rest/${table}/upsert`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows, onConflict: onConflict || 'CI' })
+            });
+            return resp.json();
+        }
 
         async function importar() {
             const fileInput = document.getElementById('csvFile');
@@ -67,26 +98,20 @@
                 const ci = cleanNum(r[0]), nom = r[1].trim(), ape = r[2].trim();
                 if (!ci && !nom) continue;
 
-                // Extraer fechas de nacimiento usando índices fijos (basado en estructura del CSV)
-                // Columnas: 0-17 datos, 18=fecha titular, 19=fecha conyuge, 20=fecha hijo
                 const fechaTitular = r.length > 18 ? r[18].trim() : '';
                 const fechaConyuge = r.length > 19 ? r[19].trim() : '';
                 const fechaHijo = r.length > 20 ? r[20].trim() : '';
 
-                // Función para limpiar fechas inválidas
                 const limpiarFecha = (f) => {
                     if (!f || f === '-   -' || f === '-' || f === '0' || f === '') return null;
-                    // Validar formato de fecha yyyy-mm-dd
                     if (f.match(/^\d{4}-\d{2}-\d{2}$/)) return f;
                     return null;
                 };
 
-                // Guardar fecha del titular para usarla en hijos
                 const fechaTitularLimpia = limpiarFecha(fechaTitular);
                 if (!titulares.has(ci)) {
                     titulares.set(ci, { ci, nombre: nom, apellido: ape, fecha_nacimiento: fechaTitularLimpia });
                 } else {
-                    // Si ya existe, actualizar la fecha si la nueva es válida
                     const existente = titulares.get(ci);
                     if (fechaTitularLimpia) {
                         existente.fecha_nacimiento = fechaTitularLimpia;
@@ -94,15 +119,14 @@
                     }
                 }
                 const cNom = r[5].trim();
-                const cCi = cleanNum(r[4]); // Cédula del cónyuge
+                const cCi = cleanNum(r[4]);
                 const fechaConyugeLimpia = limpiarFecha(fechaConyuge);
                 if (cNom && cNom !== '0') {
                     conyuges.push({ ci_titular: ci, ci: cCi, nombre: cNom, apellido: r[6].trim() || '', fecha_nacimiento: fechaConyugeLimpia });
                     if (cCi && cCi !== '0' && cCi !== '') conyugesConCI++;
                 }
                 const hNom = r[17].trim();
-                const hCi = cleanNum(r[16]); // Cédula del hijo
-                // Los hijos usan la fecha de nacimiento del titular
+                const hCi = cleanNum(r[16]);
                 if (hNom && hNom !== '0') {
                     hijos.push({ ci_titular: ci, ci: hCi, nombre: hNom, apellido: r[18].trim() || '', fecha_nacimiento: fechaTitularLimpia });
                     if (hCi && hCi !== '0' && hCi !== '') hijosConCI++;
@@ -111,68 +135,39 @@
 
             addLog(`Parseo: ${titulares.size} titulares, ${conyuges.length} cónyuges (${conyugesConCI} con CI), ${hijos.length} hijos (${hijosConCI} con CI)`);
 
-            // Mostrar algunos ejemplos de fechas para depuración
-            let count = 0;
-            for (const [ci, t] of titulares) {
-                if (count < 5) {
-                    addLog(`Ejemplo titular ${ci}: ${t.nombre} ${t.apellido}, fecha_nacimiento: ${t.fecha_nacimiento}`);
-                    count++;
-                }
-            }
-
-            // ---- UPSERT TITULARES (INSERT o UPDATE si existe) ----
+            // ---- UPSERT TITULARES ----
             addLog('Upsert titulares...');
             const arrT = Array.from(titulares.values());
             const ciToId = new Map();
             const B = 200;
             for (let i = 0; i < arrT.length; i += B) {
-                const batch = arrT.slice(i, i + B).map(t => ({ 
-                    ci: t.ci, 
-                    nombre: t.nombre, 
-                    apellido: t.apellido, 
+                const batch = arrT.slice(i, i + B).map(t => ({
+                    ci: t.ci,
+                    nombre: t.nombre,
+                    apellido: t.apellido,
                     tipo: 'titular',
                     fecha_nacimiento: t.fecha_nacimiento || null
                 }));
-                const { data, error } = await supa.from('socios').upsert(batch, { 
-                    onConflict: 'ci',
-                    ignoreDuplicates: false
-                }).select('id, ci');
+                const { data, error } = await apiUpsert('titulares', batch, 'CI');
                 if (error) { addLog(`Error lote ${i}: ${error.message}`); continue; }
-                if (data) data.forEach(d => ciToId.set(d.ci, d.id));
+                if (data) {
+                    for (const row of data) {
+                        if (row.ci) ciToId.set(row.ci, row.id);
+                    }
+                }
                 addLog(`  Titulares: ${Math.min(i + B, arrT.length)}/${arrT.length}`);
             }
 
-            // ---- FAMILIA_ID = id para titulares (bulk SQL) ----
-            addLog('Asignando familia_id...');
-            const { error: famErr } = await supa.rpc('set_titular_familia_id');
-            if (famErr) {
-                // Fallback: si la función RPC no existe, lo hacemos en lotes pequeños
-                addLog('  (Usando modo alternativo por lotes...)');
-                const entries = Array.from(ciToId.entries());
-                const BATCH = 50;
-                for (let i = 0; i < entries.length; i += BATCH) {
-                    const batch = entries.slice(i, i + BATCH);
-                    await Promise.all(batch.map(([ci, id]) =>
-                        supa.from('socios').update({ familia_id: id }).eq('id', id)
-                    ));
-                    addLog(`  familia_id: ${Math.min(i + BATCH, entries.length)}/${entries.length}`);
-                }
-            } else {
-                addLog(`  ${ciToId.size} titulares actualizados`);
-            }
-
-            // ---- UPSERT FAMILIARES (INSERT o UPDATE si existe ci) ----
+            // ---- UPSERT FAMILIARES ----
             async function upsertFamiliares(lista, tipo) {
                 if (!lista.length) return;
-                
-                // Separar por si tienen ci o no
+
                 const conCi = [];
                 const sinCi = [];
-                
+
                 for (const item of lista) {
                     const tid = ciToId.get(item.ci_titular);
                     if (tid) {
-                        // Verificar si tiene ci válido (no vacío, no 0, no null)
                         if (item.ci && item.ci !== '0' && item.ci !== '' && item.ci !== 0) {
                             conCi.push({ ...item, familia_id: tid });
                         } else {
@@ -180,10 +175,8 @@
                         }
                     }
                 }
-                
-                // Procesar los que tienen ci con UPSERT (deduplicando por ci)
+
                 if (conCi.length > 0) {
-                    // Deduplicar por ci antes de UPSERT
                     const uniqueMap = new Map();
                     for (const item of conCi) {
                         if (!uniqueMap.has(item.ci)) {
@@ -191,7 +184,7 @@
                         }
                     }
                     const uniqueConCi = Array.from(uniqueMap.values());
-                    
+
                     for (let i = 0; i < uniqueConCi.length; i += B) {
                         const batch = uniqueConCi.slice(i, i + B).map(item => ({
                             ci: item.ci,
@@ -201,25 +194,18 @@
                             familia_id: item.familia_id,
                             fecha_nacimiento: item.fecha_nacimiento || null
                         }));
-                        
-                        const { error } = await supa.from('socios').upsert(batch, {
-                            onConflict: 'ci',
-                            ignoreDuplicates: false
-                        });
+
+                        const { error } = await apiUpsert('titulares', batch, 'CI');
                         if (error) addLog(`Error upsert ${tipo}: ${error.message}`);
                     }
                 }
-                
-                // Procesar los que no tienen ci con DELETE + INSERT por familia
+
                 if (sinCi.length > 0) {
                     const familiaIds = [...new Set(sinCi.map(b => b.familia_id))];
                     for (const fid of familiaIds) {
-                        await supa.from('socios')
-                            .delete()
-                            .eq('familia_id', fid)
-                            .eq('tipo', tipo);
+                        await apiDelete('titulares', { 'familia_id': 'eq.' + fid, 'tipo': 'eq.' + tipo });
                     }
-                    
+
                     for (let i = 0; i < sinCi.length; i += B) {
                         const batch = sinCi.slice(i, i + B).map(item => ({
                             nombre: item.nombre,
@@ -228,8 +214,8 @@
                             familia_id: item.familia_id,
                             fecha_nacimiento: item.fecha_nacimiento || null
                         }));
-                        
-                        const { error } = await supa.from('socios').insert(batch);
+
+                        const { error } = await apiPost('titulares', batch);
                         if (error) addLog(`Error insertar ${tipo} sin ci: ${error.message}`);
                     }
                 }

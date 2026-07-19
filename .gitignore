@@ -14,8 +14,22 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Oracle Instant Client & wallet (must be installed separately)
+instantclient_*/
+wallet/
+network/
+Wallet_*/
+
 # Operating System files
 Thumbs.db
 db.db
 Desktop.ini
 .DS_Store
+
+# Temp investigation files
+_investigate*.js
+_check_*.js
+_fix_*.js
+_test_*.js
+_err.log
+_out.log
