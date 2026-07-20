@@ -33,3 +33,4 @@ _fix_*.js
 _test_*.js
 _err.log
 _out.log
+_thin_*
