@@ -27,11 +27,14 @@ if (process.env.ORACLE_IC) {
         fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
         console.log('cwallet.sso escrito: ' + fs.statSync(path.join(WALLET_DIR, 'cwallet.sso')).size + ' bytes');
     }
-    // sqlnet.ora es obligatorio para que Oracle encuentre el wallet
-    if (!fs.existsSync(path.join(WALLET_DIR, 'sqlnet.ora'))) {
+    // sqlnet.ora: usar el original del wallet si está en env var, si no generar uno
+    if (process.env.ORACLE_WALLET_SQLNET) {
+        fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), Buffer.from(process.env.ORACLE_WALLET_SQLNET, 'base64').toString());
+        console.log('sqlnet.ora desde env var: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
+    } else if (!fs.existsSync(path.join(WALLET_DIR, 'sqlnet.ora'))) {
         const sqlnet = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="${WALLET_DIR}")))\nSSL_SERVER_DN_MATCH=yes\n`;
         fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnet);
-        console.log('sqlnet.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
+        console.log('sqlnet.ora generado: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
     }
     console.log('Archivos en wallet dir:', fs.readdirSync(WALLET_DIR).join(', '));
     console.log('Oracle thick mode (Instant Client)');
