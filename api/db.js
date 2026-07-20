@@ -21,6 +21,11 @@ if (process.env.ORACLE_IC) {
     if (process.env.ORACLE_WALLET_SSO) {
         fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
     }
+    // sqlnet.ora es obligatorio para que Oracle encuentre el wallet
+    if (!fs.existsSync(path.join(WALLET_DIR, 'sqlnet.ora'))) {
+        const sqlnet = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="${WALLET_DIR}")))\nSSL_SERVER_DN_MATCH=yes\n`;
+        fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnet);
+    }
     console.log('Oracle thick mode (Instant Client)');
 } else {
     // Thin mode: extraer wallet de variable de entorno si existe
