@@ -1,4 +1,4 @@
-const CACHE = 'afemec-v3';
+const CACHE = 'afemec-v4';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -47,7 +47,7 @@ self.addEventListener('fetch', e => {
   }
 
   // Network-first para JS y CSS (siempre última versión en desarrollo)
-  if (req.url.indexOf('/app.js') !== -1 || req.url.indexOf('/sw.js') !== -1 || req.url.indexOf('/style.css') !== -1) {
+  if (req.url.indexOf('/app.js') !== -1 || req.url.indexOf('/sw.js') !== -1 || req.url.indexOf('/db.js') !== -1 || req.url.indexOf('/style.css') !== -1) {
     e.respondWith(
       fetch(req).then(function(fetchRes) {
         var copy = fetchRes.clone();
