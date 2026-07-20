@@ -4,64 +4,30 @@ const fs = require('fs');
 const os = require('os');
 try { require('dotenv').config(); } catch {}
 
-// Si ORACLE_IC está definido, usar thick mode (requiere Instant Client instalado)
-if (process.env.ORACLE_IC) {
-    const WALLET_DIR = path.join(process.env.ORACLE_IC, 'network', 'admin');
-    if (!fs.existsSync(WALLET_DIR)) {
-        fs.mkdirSync(WALLET_DIR, { recursive: true });
-    }
-    process.env.TNS_ADMIN = WALLET_DIR;
-    oracledb.initOracleClient({ libDir: process.env.ORACLE_IC });
-    console.log('ORACLE_WALLET_TNS set?: ' + (process.env.ORACLE_WALLET_TNS ? 'YES (' + process.env.ORACLE_WALLET_TNS.length + ' chars)' : 'NO'));
-    console.log('ORACLE_WALLET_PEM set?: ' + (process.env.ORACLE_WALLET_PEM ? 'YES (' + process.env.ORACLE_WALLET_PEM.length + ' chars)' : 'NO'));
-    console.log('ORACLE_WALLET_SSO set?: ' + (process.env.ORACLE_WALLET_SSO ? 'YES (' + process.env.ORACLE_WALLET_SSO.length + ' chars)' : 'NO'));
+// Siempre usar thin mode (no requiere Instant Client)
+const walletDir = process.env.TNS_ADMIN || path.join(os.tmpdir(), 'afemec_wallet');
+process.env.TNS_ADMIN = walletDir;
+
+if (!fs.existsSync(walletDir)) {
+    fs.mkdirSync(walletDir, { recursive: true });
     if (process.env.ORACLE_WALLET_TNS) {
-        fs.writeFileSync(path.join(WALLET_DIR, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
-        console.log('tnsnames.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'tnsnames.ora')).size + ' bytes');
+        fs.writeFileSync(path.join(walletDir, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
+        console.log('tnsnames.ora extraído de env var: ' + fs.statSync(path.join(walletDir, 'tnsnames.ora')).size + ' bytes');
     }
     if (process.env.ORACLE_WALLET_PEM) {
-        fs.writeFileSync(path.join(WALLET_DIR, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
-        console.log('ewallet.pem escrito: ' + fs.statSync(path.join(WALLET_DIR, 'ewallet.pem')).size + ' bytes');
+        fs.writeFileSync(path.join(walletDir, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
+        console.log('ewallet.pem extraído de env var: ' + fs.statSync(path.join(walletDir, 'ewallet.pem')).size + ' bytes');
     }
     if (process.env.ORACLE_WALLET_SSO) {
-        fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
-        console.log('cwallet.sso escrito: ' + fs.statSync(path.join(WALLET_DIR, 'cwallet.sso')).size + ' bytes');
+        fs.writeFileSync(path.join(walletDir, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
+        console.log('cwallet.sso extraído de env var: ' + fs.statSync(path.join(walletDir, 'cwallet.sso')).size + ' bytes');
     }
-    // sqlnet.ora: usar el original del wallet (con ?/network/admin)
-    const sqlnetContent = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="?/network/admin")))\nSSL_SERVER_DN_MATCH=yes\n`;
-    fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnetContent);
-    console.log('sqlnet.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
-    // Forzar ORACLE_HOME para que coincida con el directorio de Instant Client
-    process.env.ORACLE_HOME = process.env.ORACLE_IC;
-    console.log('Archivos en wallet dir:', fs.readdirSync(WALLET_DIR).join(', '));
-    console.log('Oracle thick mode (Instant Client)');
-} else {
-    // Thin mode: extraer wallet de variable de entorno si existe
-    process.env.TNS_ADMIN = process.env.TNS_ADMIN || path.join(os.tmpdir(), 'afemec_wallet');
-    const walletDir = process.env.TNS_ADMIN;
-    if (!fs.existsSync(walletDir)) {
-        fs.mkdirSync(walletDir, { recursive: true });
-        if (process.env.ORACLE_WALLET_TNS) {
-            fs.writeFileSync(path.join(walletDir, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
-            console.log('tnsnames.ora extraído de env var');
-        }
-        if (process.env.ORACLE_WALLET_PEM) {
-            fs.writeFileSync(path.join(walletDir, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
-            console.log('ewallet.pem extraído de env var');
-        }
-        if (process.env.ORACLE_WALLET_P12) {
-            fs.writeFileSync(path.join(walletDir, 'ewallet.p12'), Buffer.from(process.env.ORACLE_WALLET_P12, 'base64'));
-            console.log('ewallet.p12 extraído de env var');
-        }
-        if (process.env.ORACLE_WALLET_SSO) {
-            fs.writeFileSync(path.join(walletDir, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
-            console.log('cwallet.sso extraído de env var');
-        }
-    }
-    console.log('Oracle thin mode (no Instant Client)');
+    const sqlnetContent = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="${walletDir}")))\nSSL_SERVER_DN_MATCH=yes\n`;
+    fs.writeFileSync(path.join(walletDir, 'sqlnet.ora'), sqlnetContent);
+    console.log('sqlnet.ora escrito: ' + fs.statSync(path.join(walletDir, 'sqlnet.ora')).size + ' bytes');
+    console.log('Archivos en wallet dir:', fs.readdirSync(walletDir).join(', '));
 }
 
-// Solo usar poolMin/poolMax en thin mode si no hay Instant Client
 const dbConfig = {
     user: process.env.ORACLE_USER || 'admin',
     password: process.env.ORACLE_PASSWORD,
