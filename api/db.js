@@ -27,19 +27,12 @@ if (process.env.ORACLE_IC) {
         fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
         console.log('cwallet.sso escrito: ' + fs.statSync(path.join(WALLET_DIR, 'cwallet.sso')).size + ' bytes');
     }
-    // sqlnet.ora: usar el original del wallet si está en env var, si no generar uno
-    if (process.env.ORACLE_WALLET_SQLNET) {
-        fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), Buffer.from(process.env.ORACLE_WALLET_SQLNET, 'base64').toString());
-        console.log('sqlnet.ora desde env var: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
-    } else if (!fs.existsSync(path.join(WALLET_DIR, 'sqlnet.ora'))) {
-        // Usar ?/network/admin igual que el wallet original
-        const sqlnet = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="?/network/admin")))\nSSL_SERVER_DN_MATCH=yes\n`;
-        fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnet);
-        console.log('sqlnet.ora generado: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
-    }
+    // sqlnet.ora: usar el original del wallet (con ?/network/admin)
+    const sqlnetContent = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="?/network/admin")))\nSSL_SERVER_DN_MATCH=yes\n`;
+    fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnetContent);
+    console.log('sqlnet.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
     // Forzar ORACLE_HOME para que coincida con el directorio de Instant Client
     process.env.ORACLE_HOME = process.env.ORACLE_IC;
-    process.env.ORACLE_HOME_NAME = 'instantclient';
     console.log('Archivos en wallet dir:', fs.readdirSync(WALLET_DIR).join(', '));
     console.log('Oracle thick mode (Instant Client)');
 } else {
