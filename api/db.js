@@ -1,14 +1,42 @@
 const oracledb = require('oracledb');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 try { require('dotenv').config(); } catch {}
 
-const INSTANT_CLIENT_DIR = process.env.ORACLE_IC || 'C:\\oracle\\instantclient\\instantclient_23_0';
-const WALLET_DIR = path.join(INSTANT_CLIENT_DIR, 'network', 'admin');
+// Si ORACLE_IC está definido, usar thick mode (requiere Instant Client instalado)
+if (process.env.ORACLE_IC) {
+    const WALLET_DIR = path.join(process.env.ORACLE_IC, 'network', 'admin');
+    process.env.TNS_ADMIN = WALLET_DIR;
+    oracledb.initOracleClient({ libDir: process.env.ORACLE_IC });
+    console.log('Oracle thick mode (Instant Client)');
+} else {
+    // Thin mode: extraer wallet de variable de entorno si existe
+    process.env.TNS_ADMIN = process.env.TNS_ADMIN || path.join(os.tmpdir(), 'afemec_wallet');
+    const walletDir = process.env.TNS_ADMIN;
+    if (!fs.existsSync(walletDir)) {
+        fs.mkdirSync(walletDir, { recursive: true });
+        if (process.env.ORACLE_WALLET_TNS) {
+            fs.writeFileSync(path.join(walletDir, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
+            console.log('tnsnames.ora extraído de env var');
+        }
+        if (process.env.ORACLE_WALLET_PEM) {
+            fs.writeFileSync(path.join(walletDir, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
+            console.log('ewallet.pem extraído de env var');
+        }
+        if (process.env.ORACLE_WALLET_P12) {
+            fs.writeFileSync(path.join(walletDir, 'ewallet.p12'), Buffer.from(process.env.ORACLE_WALLET_P12, 'base64'));
+            console.log('ewallet.p12 extraído de env var');
+        }
+        if (process.env.ORACLE_WALLET_SSO) {
+            fs.writeFileSync(path.join(walletDir, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
+            console.log('cwallet.sso extraído de env var');
+        }
+    }
+    console.log('Oracle thin mode (no Instant Client)');
+}
 
-process.env.TNS_ADMIN = WALLET_DIR;
-
-oracledb.initOracleClient({ libDir: INSTANT_CLIENT_DIR });
-
+// Solo usar poolMin/poolMax en thin mode si no hay Instant Client
 const dbConfig = {
     user: process.env.ORACLE_USER || 'admin',
     password: process.env.ORACLE_PASSWORD,

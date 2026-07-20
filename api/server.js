@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 try { require('dotenv').config(); } catch {}
-const PORT = process.env.API_PORT || 3046;
+const PORT = process.env.PORT || process.env.API_PORT || 3046;
 
 const FK_MAP = {
     atletas: {
