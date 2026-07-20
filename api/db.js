@@ -12,20 +12,28 @@ if (process.env.ORACLE_IC) {
     }
     process.env.TNS_ADMIN = WALLET_DIR;
     oracledb.initOracleClient({ libDir: process.env.ORACLE_IC });
+    console.log('ORACLE_WALLET_TNS set?: ' + (process.env.ORACLE_WALLET_TNS ? 'YES (' + process.env.ORACLE_WALLET_TNS.length + ' chars)' : 'NO'));
+    console.log('ORACLE_WALLET_PEM set?: ' + (process.env.ORACLE_WALLET_PEM ? 'YES (' + process.env.ORACLE_WALLET_PEM.length + ' chars)' : 'NO'));
+    console.log('ORACLE_WALLET_SSO set?: ' + (process.env.ORACLE_WALLET_SSO ? 'YES (' + process.env.ORACLE_WALLET_SSO.length + ' chars)' : 'NO'));
     if (process.env.ORACLE_WALLET_TNS) {
         fs.writeFileSync(path.join(WALLET_DIR, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
+        console.log('tnsnames.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'tnsnames.ora')).size + ' bytes');
     }
     if (process.env.ORACLE_WALLET_PEM) {
         fs.writeFileSync(path.join(WALLET_DIR, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
+        console.log('ewallet.pem escrito: ' + fs.statSync(path.join(WALLET_DIR, 'ewallet.pem')).size + ' bytes');
     }
     if (process.env.ORACLE_WALLET_SSO) {
         fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
+        console.log('cwallet.sso escrito: ' + fs.statSync(path.join(WALLET_DIR, 'cwallet.sso')).size + ' bytes');
     }
     // sqlnet.ora es obligatorio para que Oracle encuentre el wallet
     if (!fs.existsSync(path.join(WALLET_DIR, 'sqlnet.ora'))) {
         const sqlnet = `WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="${WALLET_DIR}")))\nSSL_SERVER_DN_MATCH=yes\n`;
         fs.writeFileSync(path.join(WALLET_DIR, 'sqlnet.ora'), sqlnet);
+        console.log('sqlnet.ora escrito: ' + fs.statSync(path.join(WALLET_DIR, 'sqlnet.ora')).size + ' bytes');
     }
+    console.log('Archivos en wallet dir:', fs.readdirSync(WALLET_DIR).join(', '));
     console.log('Oracle thick mode (Instant Client)');
 } else {
     // Thin mode: extraer wallet de variable de entorno si existe
