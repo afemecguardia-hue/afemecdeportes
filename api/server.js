@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const oracledb = require('oracledb');
 const { execute, closePool, getPool } = require('./db');
@@ -6,6 +7,7 @@ const { execute, closePool, getPool } = require('./db');
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, '..')));
 
 try { require('dotenv').config(); } catch {}
 const PORT = process.env.PORT || process.env.API_PORT || 3046;
