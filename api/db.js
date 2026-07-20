@@ -7,8 +7,20 @@ try { require('dotenv').config(); } catch {}
 // Si ORACLE_IC está definido, usar thick mode (requiere Instant Client instalado)
 if (process.env.ORACLE_IC) {
     const WALLET_DIR = path.join(process.env.ORACLE_IC, 'network', 'admin');
+    if (!fs.existsSync(WALLET_DIR)) {
+        fs.mkdirSync(WALLET_DIR, { recursive: true });
+    }
     process.env.TNS_ADMIN = WALLET_DIR;
     oracledb.initOracleClient({ libDir: process.env.ORACLE_IC });
+    if (process.env.ORACLE_WALLET_TNS) {
+        fs.writeFileSync(path.join(WALLET_DIR, 'tnsnames.ora'), Buffer.from(process.env.ORACLE_WALLET_TNS, 'base64').toString());
+    }
+    if (process.env.ORACLE_WALLET_PEM) {
+        fs.writeFileSync(path.join(WALLET_DIR, 'ewallet.pem'), Buffer.from(process.env.ORACLE_WALLET_PEM, 'base64').toString());
+    }
+    if (process.env.ORACLE_WALLET_SSO) {
+        fs.writeFileSync(path.join(WALLET_DIR, 'cwallet.sso'), Buffer.from(process.env.ORACLE_WALLET_SSO, 'base64'));
+    }
     console.log('Oracle thick mode (Instant Client)');
 } else {
     // Thin mode: extraer wallet de variable de entorno si existe

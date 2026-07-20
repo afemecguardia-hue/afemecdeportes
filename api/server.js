@@ -293,8 +293,10 @@ app.get('/api/rest/:table', async (req, res) => {
 
         res.json({ data, error: null });
     } catch (err) {
-        console.error('GET error:', err);
-        res.status(500).json({ data: null, error: { message: err.message } });
+        console.error('GET error:', err.message);
+        console.error('GET error stack:', err.stack);
+        if (err.errorNum) console.error('Oracle code:', err.errorNum);
+        res.status(500).json({ data: null, error: { message: err.message, code: err.errorNum } });
     }
 });
 
