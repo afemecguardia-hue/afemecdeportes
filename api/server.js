@@ -263,6 +263,9 @@ function lowerKeys(obj) {
     return result;
 }
 
+// Health check (no requiere DB)
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 app.get('/api/rest/:table', async (req, res) => {
     try {
         const { table } = req.params;
