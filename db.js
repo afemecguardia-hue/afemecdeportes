@@ -1,4 +1,4 @@
-const API_URL = window.location.protocol + '//' + window.location.hostname + ':3046';
+const API_URL = ''; // Mismo origen (sin puerto fijo)
 
 class OracleQuery {
     constructor(table) {
