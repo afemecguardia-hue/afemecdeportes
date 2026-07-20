@@ -63,8 +63,19 @@ let pool = null;
 async function getPool() {
     if (!pool) {
         if (!dbConfig.password) throw new Error('ORACLE_PASSWORD no configurada. Creá un archivo .env desde .env.example');
-        pool = await oracledb.createPool(dbConfig);
-        console.log('Oracle pool creado');
+        console.log('Iniciando conexión a Oracle...');
+        console.log('ORACLE_USER=' + dbConfig.user);
+        console.log('ORACLE_CONNECT=' + dbConfig.connectString);
+        console.log('TNS_ADMIN=' + process.env.TNS_ADMIN);
+        try {
+            pool = await oracledb.createPool(dbConfig);
+            console.log('Oracle pool creado OK');
+        } catch (e) {
+            console.log('ERROR AL CREAR POOL: ' + e.message);
+            console.log('CODE: ' + e.errorNum);
+            console.log('STACK: ' + e.stack);
+            throw e;
+        }
     }
     return pool;
 }
